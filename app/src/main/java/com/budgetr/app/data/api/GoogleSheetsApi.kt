@@ -11,6 +11,12 @@ import retrofit2.http.Query
 
 interface GoogleSheetsApi {
 
+    @GET("spreadsheets/{spreadsheetId}")
+    suspend fun getSpreadsheet(
+        @Path("spreadsheetId") spreadsheetId: String,
+        @Query("fields") fields: String = "sheets.properties"
+    ): SpreadsheetMetadata
+
     @GET("spreadsheets/{spreadsheetId}/values/{range}")
     suspend fun getValues(
         @Path("spreadsheetId") spreadsheetId: String,
@@ -92,4 +98,20 @@ data class DimensionRange(
 @JsonClass(generateAdapter = true)
 data class BatchUpdateResponse(
     @Json(name = "spreadsheetId") val spreadsheetId: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class SpreadsheetMetadata(
+    @Json(name = "sheets") val sheets: List<SheetMetadata>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class SheetMetadata(
+    @Json(name = "properties") val properties: SheetProperties? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class SheetProperties(
+    @Json(name = "sheetId") val sheetId: Int,
+    @Json(name = "title") val title: String
 )

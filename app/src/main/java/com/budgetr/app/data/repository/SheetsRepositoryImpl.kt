@@ -26,6 +26,20 @@ class SheetsRepositoryImpl @Inject constructor(
     private val prefs: PreferencesManager
 ) : SheetsRepository {
 
+    // Cache of sheet title -> numeric sheetId (gid) from the Sheets API
+    private var sheetIdCache: Map<String, Int> = emptyMap()
+
+    private suspend fun resolveSheetId(sheetTab: SheetTab): Int {
+        sheetIdCache[sheetTab.sheetName]?.let { return it }
+        val spreadsheetId = prefs.getSpreadsheetId() ?: return 0
+        val metadata = api.getSpreadsheet(spreadsheetId)
+        sheetIdCache = metadata.sheets
+            ?.mapNotNull { it.properties }
+            ?.associate { it.title to it.sheetId }
+            ?: emptyMap()
+        return sheetIdCache[sheetTab.sheetName] ?: 0
+    }
+
     override fun getTransactions(sheetTab: SheetTab): Flow<List<Transaction>> =
         transactionDao.getTransactionsByTab(sheetTab.name).map { entities ->
             entities.map { it.toTransaction() }
@@ -113,7 +127,7 @@ class SheetsRepositoryImpl @Inject constructor(
 
     override suspend fun deleteTransaction(transaction: Transaction) {
         val spreadsheetId = prefs.getSpreadsheetId() ?: return
-        val sheetId = transaction.sheetTab.ordinal // Note: requires matching sheet gid
+        val sheetId = resolveSheetId(transaction.sheetTab)
         val rowIndex = transaction.rowIndex - 1 // 0-based for API
         api.batchUpdate(
             spreadsheetId,
