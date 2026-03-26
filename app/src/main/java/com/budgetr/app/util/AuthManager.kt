@@ -24,7 +24,6 @@ class AuthManager @Inject constructor(
         .requestEmail()
         .requestProfile()
         .requestScopes(Scope(SHEETS_SCOPE))
-        .requestServerAuthCode(/* clientId = */ "YOUR_WEB_CLIENT_ID", true)
         .build()
 
     private val client: GoogleSignInClient by lazy {
