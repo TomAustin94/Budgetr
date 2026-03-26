@@ -25,6 +25,25 @@
             </intent-filter>
         </activity>
 
+        <!-- Transparent overlay activity launched from the home screen widget -->
+        <activity
+            android:name=".widget.QuickAddActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Budgetr.QuickAdd"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- Home screen widget -->
+        <receiver
+            android:name=".widget.BudgetrWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/budgetr_widget_info" />
+        </receiver>
+
     </application>
 
 </manifest>

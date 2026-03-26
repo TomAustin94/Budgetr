@@ -10,6 +10,7 @@ class PreferencesManager @Inject constructor(
     companion object {
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_SPREADSHEET_ID = "spreadsheet_id"
+        private const val KEY_SPREADSHEET_NAME = "spreadsheet_name"
         private const val KEY_USER_EMAIL = "user_email"
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_PHOTO = "user_photo"
@@ -20,6 +21,9 @@ class PreferencesManager @Inject constructor(
 
     fun getSpreadsheetId(): String? = prefs.getString(KEY_SPREADSHEET_ID, null)
     fun setSpreadsheetId(id: String?) = prefs.edit().putString(KEY_SPREADSHEET_ID, id).apply()
+
+    fun getSpreadsheetName(): String? = prefs.getString(KEY_SPREADSHEET_NAME, null)
+    fun setSpreadsheetName(name: String?) = prefs.edit().putString(KEY_SPREADSHEET_NAME, name).apply()
 
     fun getUserEmail(): String? = prefs.getString(KEY_USER_EMAIL, null)
     fun setUserEmail(email: String?) = prefs.edit().putString(KEY_USER_EMAIL, email).apply()

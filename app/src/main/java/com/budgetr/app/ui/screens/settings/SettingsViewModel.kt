@@ -2,6 +2,8 @@ package com.budgetr.app.ui.screens.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.budgetr.app.data.api.DriveFile
+import com.budgetr.app.data.repository.SheetsRepository
 import com.budgetr.app.util.AuthManager
 import com.budgetr.app.util.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,34 +16,65 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val spreadsheetId: String = "",
+    val spreadsheetName: String = "",
     val userEmail: String? = null,
     val userName: String? = null,
-    val savedMessage: String? = null
+    val savedMessage: String? = null,
+    val availableSheets: List<DriveFile> = emptyList(),
+    val isLoadingSheets: Boolean = false,
+    val showSheetPicker: Boolean = false,
+    val sheetPickerError: String? = null
 )
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val prefs: PreferencesManager,
-    private val authManager: AuthManager
+    private val authManager: AuthManager,
+    private val repository: SheetsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
         SettingsUiState(
             spreadsheetId = prefs.getSpreadsheetId() ?: "",
+            spreadsheetName = prefs.getSpreadsheetName() ?: "",
             userEmail = authManager.getUserEmail(),
             userName = authManager.getUserName()
         )
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
-    fun updateSpreadsheetId(id: String) {
-        _uiState.update { it.copy(spreadsheetId = id) }
+    fun loadSpreadsheets() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingSheets = true, showSheetPicker = true, sheetPickerError = null) }
+            try {
+                val sheets = repository.listSpreadsheets()
+                _uiState.update { it.copy(availableSheets = sheets, isLoadingSheets = false) }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoadingSheets = false,
+                        showSheetPicker = false,
+                        sheetPickerError = "Could not load sheets. If this is your first time, please sign out and back in to grant Google Drive access."
+                    )
+                }
+            }
+        }
     }
 
-    fun saveSpreadsheetId() {
-        prefs.setSpreadsheetId(_uiState.value.spreadsheetId.trim())
-        _uiState.update { it.copy(savedMessage = "Spreadsheet ID saved!") }
+    fun selectSpreadsheet(id: String, name: String) {
+        prefs.setSpreadsheetId(id)
+        prefs.setSpreadsheetName(name)
+        _uiState.update {
+            it.copy(
+                spreadsheetId = id,
+                spreadsheetName = name,
+                showSheetPicker = false,
+                savedMessage = "\"$name\" selected!"
+            )
+        }
     }
+
+    fun dismissSheetPicker() = _uiState.update { it.copy(showSheetPicker = false) }
 
     fun clearSavedMessage() = _uiState.update { it.copy(savedMessage = null) }
 

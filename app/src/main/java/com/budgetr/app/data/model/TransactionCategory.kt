@@ -9,6 +9,8 @@ enum class TransactionCategory(val displayName: String) {
 
     companion object {
         fun fromString(value: String?): TransactionCategory =
-            entries.firstOrNull { it.displayName.equals(value, ignoreCase = true) } ?: UNKNOWN
+            entries.firstOrNull { it.displayName.equals(value, ignoreCase = true) }
+                ?: entries.firstOrNull { it.name.equals(value, ignoreCase = true) }
+                ?: UNKNOWN
     }
 }

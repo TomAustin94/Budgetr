@@ -62,7 +62,6 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
     debugImplementation(libs.androidx.ui.tooling)
-    debugImplementation(libs.androidx.ui.test.manifest)
 
     // Navigation
     implementation(libs.androidx.navigation.compose)
@@ -97,4 +96,7 @@ dependencies {
 
     // Coil
     implementation(libs.coil.compose)
+
+    // Glance (home screen widget)
+    implementation(libs.glance.appwidget)
 }

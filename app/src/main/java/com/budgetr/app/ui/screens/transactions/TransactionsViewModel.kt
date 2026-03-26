@@ -3,6 +3,7 @@ package com.budgetr.app.ui.screens.transactions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetr.app.data.model.SheetTab
+import com.budgetr.app.data.model.SortOrder
 import com.budgetr.app.data.model.Transaction
 import com.budgetr.app.data.model.TransactionCategory
 import com.budgetr.app.data.repository.SheetsRepository
@@ -22,10 +23,14 @@ data class TransactionsUiState(
     val selectedTab: SheetTab = SheetTab.MONZO,
     val transactions: List<Transaction> = emptyList(),
     val categoryFilter: TransactionCategory? = null,
+    val searchQuery: String = "",
+    val sortOrder: SortOrder = SortOrder.DATE_DESC,
     val error: String? = null,
     val transactionToDelete: Transaction? = null,
     val transactionToEdit: Transaction? = null,
-    val showAddSheet: Boolean = false
+    val showAddSheet: Boolean = false,
+    val addSaveCount: Int = 0,
+    val isResetting: Boolean = false
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -39,16 +44,32 @@ class TransactionsViewModel @Inject constructor(
 
     private val selectedTabFlow = MutableStateFlow(SheetTab.MONZO)
     private val categoryFilterFlow = MutableStateFlow<TransactionCategory?>(null)
+    private val searchQueryFlow = MutableStateFlow("")
+    private val sortOrderFlow = MutableStateFlow(SortOrder.DATE_DESC)
 
     init {
         viewModelScope.launch {
             selectedTabFlow.flatMapLatest { tab ->
                 combine(
                     repository.getTransactions(tab),
-                    categoryFilterFlow
-                ) { transactions, filter ->
-                    if (filter == null) transactions
-                    else transactions.filter { it.category == filter }
+                    categoryFilterFlow,
+                    searchQueryFlow,
+                    sortOrderFlow
+                ) { transactions, filter, query, sort ->
+                    var result = transactions
+                    if (filter != null) result = result.filter { it.category == filter }
+                    if (query.isNotBlank()) {
+                        result = result.filter {
+                            it.info.contains(query, ignoreCase = true) ||
+                            it.date.contains(query, ignoreCase = true)
+                        }
+                    }
+                    when (sort) {
+                        SortOrder.DATE_DESC -> result.sortedByDescending { it.date }
+                        SortOrder.DATE_ASC -> result.sortedBy { it.date }
+                        SortOrder.AMOUNT_DESC -> result.sortedByDescending { kotlin.math.abs(it.amount) }
+                        SortOrder.AMOUNT_ASC -> result.sortedBy { kotlin.math.abs(it.amount) }
+                    }
                 }
             }.collect { filtered ->
                 _uiState.update { it.copy(transactions = filtered) }
@@ -66,6 +87,16 @@ class TransactionsViewModel @Inject constructor(
     fun setCategoryFilter(category: TransactionCategory?) {
         categoryFilterFlow.value = category
         _uiState.update { it.copy(categoryFilter = category) }
+    }
+
+    fun setSearchQuery(query: String) {
+        searchQueryFlow.value = query
+        _uiState.update { it.copy(searchQuery = query) }
+    }
+
+    fun setSortOrder(order: SortOrder) {
+        sortOrderFlow.value = order
+        _uiState.update { it.copy(sortOrder = order) }
     }
 
     fun refresh(tab: SheetTab = _uiState.value.selectedTab) {
@@ -92,11 +123,27 @@ class TransactionsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 if (transaction.rowIndex > 0) {
+                    // Edit — close the sheet
                     repository.updateTransaction(transaction)
+                    _uiState.update { it.copy(showAddSheet = false, transactionToEdit = null) }
                 } else {
+                    // Add — keep sheet open for next entry, reset form via addSaveCount
                     repository.addTransaction(transaction)
+                    _uiState.update { it.copy(addSaveCount = it.addSaveCount + 1) }
                 }
-                _uiState.update { it.copy(showAddSheet = false, transactionToEdit = null) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message) }
+            }
+        }
+    }
+
+    /** Creates two transactions for a transfer between accounts. */
+    fun saveTransfer(source: Transaction, destination: Transaction) {
+        viewModelScope.launch {
+            try {
+                repository.addTransaction(source)
+                repository.addTransaction(destination)
+                _uiState.update { it.copy(addSaveCount = it.addSaveCount + 1) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message) }
             }
@@ -111,6 +158,22 @@ class TransactionsViewModel @Inject constructor(
                 _uiState.update { it.copy(transactionToDelete = null) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(transactionToDelete = null, error = e.message) }
+            }
+        }
+    }
+
+    /** Deletes all One Off Cost transactions across all tabs. */
+    fun resetToFixedTransactions() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResetting = true, error = null) }
+            try {
+                SheetTab.entries.forEach { tab ->
+                    repository.deleteOneOffTransactions(tab)
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message) }
+            } finally {
+                _uiState.update { it.copy(isResetting = false) }
             }
         }
     }

@@ -12,6 +12,9 @@ interface AccountBalanceDao {
     @Query("SELECT * FROM account_balances")
     fun getAll(): Flow<List<AccountBalanceEntity>>
 
+    @Query("SELECT * FROM account_balances")
+    suspend fun getAllSync(): List<AccountBalanceEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(balances: List<AccountBalanceEntity>)
 

@@ -9,49 +9,45 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetr.app.data.model.AccountBalance
-import com.budgetr.app.ui.theme.IncomeGreen
 import com.budgetr.app.ui.theme.ExpenseRed
+import com.budgetr.app.ui.theme.IncomeGreen
 import com.budgetr.app.util.toCurrencyString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onNavigateToTransactions: () -> Unit,
-    onNavigateToBalances: () -> Unit,
-    onNavigateToSettings: () -> Unit,
+    onNavigateToAddTransaction: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -78,33 +74,29 @@ fun HomeScreen(
                             )
                         }
                     }
-                },
-                actions = {
-                    IconButton(onClick = onNavigateToBalances) {
-                        Icon(Icons.Default.AccountBalance, contentDescription = "Balances")
-                    }
-                    IconButton(onClick = onNavigateToTransactions) {
-                        Icon(Icons.Default.List, contentDescription = "Transactions")
-                    }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
-                    }
                 }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNavigateToTransactions) {
+            FloatingActionButton(onClick = onNavigateToAddTransaction) {
                 Icon(Icons.Default.Add, contentDescription = "Add transaction")
             }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
-        PullToRefreshBox(
-            isRefreshing = uiState.isRefreshing,
-            onRefresh = viewModel::refresh,
+        val pullRefreshState = rememberPullToRefreshState()
+        if (pullRefreshState.isRefreshing) {
+            LaunchedEffect(true) { viewModel.refresh() }
+        }
+        LaunchedEffect(uiState.isRefreshing) {
+            if (!uiState.isRefreshing) pullRefreshState.endRefresh()
+        }
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
             if (uiState.isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -123,7 +115,7 @@ fun HomeScreen(
                         BudgetSummaryCard(
                             totalIncome = uiState.totalIncome,
                             totalOutgoings = uiState.totalOutgoings,
-                            remainingBudget = uiState.remainingBudget
+                            totalAvailable = uiState.totalAvailable
                         )
                     }
 
@@ -143,6 +135,14 @@ fun HomeScreen(
                     item { Spacer(Modifier.height(80.dp)) }
                 }
             }
+            PullToRefreshContainer(
+                state = pullRefreshState,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .graphicsLayer {
+                        alpha = if (pullRefreshState.isRefreshing || pullRefreshState.progress > 0f) 1f else 0f
+                    }
+            )
         }
     }
 }
@@ -151,7 +151,7 @@ fun HomeScreen(
 private fun BudgetSummaryCard(
     totalIncome: Double,
     totalOutgoings: Double,
-    remainingBudget: Double
+    totalAvailable: Double
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -164,18 +164,18 @@ private fun BudgetSummaryCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "This Month",
+                text = "Overview",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
-                text = remainingBudget.toCurrencyString(),
+                text = totalAvailable.toCurrencyString(),
                 style = MaterialTheme.typography.displaySmall,
-                color = if (remainingBudget >= 0) IncomeGreen else ExpenseRed,
+                color = if (totalAvailable >= 0) IncomeGreen else ExpenseRed,
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Remaining",
+                text = "Total Available",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
             )

@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+**/build/
+local.properties
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# IntelliJ / Android Studio
+*.iml
+.idea/
+*.iws
+*.ipr
+out/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Kotlin
+*.kotlin_module
+
+# Signing
+*.jks
+*.keystore
+
+# macOS
+.DS_Store

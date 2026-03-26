@@ -2,6 +2,7 @@ package com.budgetr.app.util
 
 import android.content.Context
 import android.content.Intent
+import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -18,13 +19,14 @@ class AuthManager @Inject constructor(
 ) {
     companion object {
         const val SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets"
+        const val DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.metadata.readonly"
+        const val TOKEN_SCOPE = "oauth2:$SHEETS_SCOPE $DRIVE_SCOPE"
     }
 
     private val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
         .requestEmail()
         .requestProfile()
-        .requestScopes(Scope(SHEETS_SCOPE))
-        .requestServerAuthCode(/* clientId = */ "YOUR_WEB_CLIENT_ID", true)
+        .requestScopes(Scope(SHEETS_SCOPE), Scope(DRIVE_SCOPE))
         .build()
 
     private val client: GoogleSignInClient by lazy {
@@ -43,6 +45,22 @@ class AuthManager @Inject constructor(
     }
 
     fun getAccessToken(): String? = prefs.getAccessToken()
+
+    /**
+     * Clears the cached token and fetches a fresh one. Runs synchronously — call only from
+     * a background thread (OkHttp interceptor threads are fine).
+     */
+    fun refreshToken(): String? {
+        val account = GoogleSignIn.getLastSignedInAccount(context) ?: return null
+        return try {
+            GoogleAuthUtil.clearToken(context, prefs.getAccessToken())
+            val newToken = GoogleAuthUtil.getToken(context, account.account!!, TOKEN_SCOPE)
+            prefs.setAccessToken(newToken)
+            newToken
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     fun signOut(onComplete: () -> Unit) {
         client.signOut().addOnCompleteListener {

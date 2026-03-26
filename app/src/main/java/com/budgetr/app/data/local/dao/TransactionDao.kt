@@ -12,6 +12,9 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE sheetTab = :sheetTab ORDER BY rowIndex DESC")
     fun getTransactionsByTab(sheetTab: String): Flow<List<TransactionEntity>>
 
+    @Query("SELECT * FROM transactions WHERE sheetTab = :sheetTab ORDER BY rowIndex DESC")
+    suspend fun getTransactionsByTabSync(sheetTab: String): List<TransactionEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(transactions: List<TransactionEntity>)
 
