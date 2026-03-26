@@ -145,7 +145,8 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
             Spacer(GlanceModifier.width(5.dp))
             QuickAddButton(context, "Fixed", TransactionCategory.FIXED_COST, Color(0xFFFFAB40))
             Spacer(GlanceModifier.width(5.dp))
-            QuickAddButton(context, "Income", TransactionCategory.INCOME, positiveColor)
+            // Transfer opens the full-app form (needs destination account picker)
+            QuickAddButton(context, "Transfer", TransactionCategory.TRANSFER, Color(0xFF90CAF9), fullApp = true)
         }
     }
 }
@@ -155,10 +156,12 @@ private fun QuickAddButton(
     context: Context,
     label: String,
     category: TransactionCategory,
-    color: Color
+    color: Color,
+    fullApp: Boolean = false
 ) {
     val intent = Intent(context, QuickAddActivity::class.java).apply {
         putExtra(QuickAddActivity.EXTRA_CATEGORY, category.name)
+        putExtra(QuickAddActivity.EXTRA_FULL_APP, fullApp)
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
     Box(
