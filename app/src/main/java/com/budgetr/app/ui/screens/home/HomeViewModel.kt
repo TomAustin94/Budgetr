@@ -49,9 +49,10 @@ class HomeViewModel @Inject constructor(
             combine(
                 repository.getAccountBalances(),
                 repository.getTransactions(SheetTab.MONZO),
-                repository.getTransactions(SheetTab.HALIFAX)
-            ) { balances, monzoTx, halifaxTx ->
-                val allTx = monzoTx + halifaxTx
+                repository.getTransactions(SheetTab.HALIFAX_DEBIT),
+                repository.getTransactions(SheetTab.HALIFAX_CREDIT)
+            ) { balances, monzoTx, halifaxDebitTx, halifaxCreditTx ->
+                val allTx = monzoTx + halifaxDebitTx + halifaxCreditTx
                 val income = allTx
                     .filter { it.category == TransactionCategory.INCOME }
                     .sumOf { it.amount }
@@ -78,7 +79,8 @@ class HomeViewModel @Inject constructor(
             try {
                 repository.refreshAccountBalances()
                 repository.refreshTransactions(SheetTab.MONZO)
-                repository.refreshTransactions(SheetTab.HALIFAX)
+                repository.refreshTransactions(SheetTab.HALIFAX_DEBIT)
+                repository.refreshTransactions(SheetTab.HALIFAX_CREDIT)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message) }
             } finally {

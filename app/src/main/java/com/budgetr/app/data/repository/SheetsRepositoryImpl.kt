@@ -61,7 +61,7 @@ class SheetsRepositoryImpl @Inject constructor(
 
     override suspend fun refreshAccountBalances() {
         val spreadsheetId = prefs.getSpreadsheetId() ?: return
-        val range = "Account Balances!A:F"
+        val range = "Cover Sheet!A:F"
         val response = api.getValues(spreadsheetId, range)
         val rows = response.values ?: return
 
