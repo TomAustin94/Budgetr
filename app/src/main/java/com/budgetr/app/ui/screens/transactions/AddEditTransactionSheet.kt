@@ -74,18 +74,24 @@ fun AddEditTransactionSheet(
     addSaveCount: Int,
     onSave: (Transaction) -> Unit,
     onSaveTransfer: (source: Transaction, destination: Transaction) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    presetCategory: TransactionCategory? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val today = SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(Date())
     val isEdit = existingTransaction != null
 
-    var date by remember { mutableStateOf(existingTransaction?.date ?: today) }
+    val initialCategory = existingTransaction?.category ?: presetCategory ?: TransactionCategory.ONE_OFF_COST
+    var date by remember {
+        mutableStateOf(
+            existingTransaction?.date ?: if (initialCategory == TransactionCategory.FIXED_COST) getPayDate() else today
+        )
+    }
     var info by remember { mutableStateOf(existingTransaction?.info ?: "") }
     var amount by remember {
         mutableStateOf(existingTransaction?.amount?.let { if (it < 0) (-it).toString() else it.toString() } ?: "")
     }
-    var category by remember { mutableStateOf(existingTransaction?.category ?: TransactionCategory.ONE_OFF_COST) }
+    var category by remember { mutableStateOf(initialCategory) }
     var selectedTab by remember { mutableStateOf(existingTransaction?.sheetTab ?: currentTab) }
     var transferToTab by remember { mutableStateOf<SheetTab?>(null) }
 

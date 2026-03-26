@@ -96,4 +96,7 @@ dependencies {
 
     // Coil
     implementation(libs.coil.compose)
+
+    // Glance (home screen widget)
+    implementation(libs.glance.appwidget)
 }
