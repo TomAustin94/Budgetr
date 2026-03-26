@@ -1,0 +1,10 @@
+package com.budgetr.app.ui.navigation
+
+object NavRoutes {
+    const val SPLASH = "splash"
+    const val LOGIN = "login"
+    const val HOME = "home"
+    const val TRANSACTIONS = "transactions"
+    const val ACCOUNT_BALANCES = "account_balances"
+    const val SETTINGS = "settings"
+}
