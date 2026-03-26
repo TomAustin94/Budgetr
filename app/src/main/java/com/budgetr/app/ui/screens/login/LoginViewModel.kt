@@ -44,12 +44,12 @@ class LoginViewModel @Inject constructor(
                 val task = GoogleSignIn.getSignedInAccountFromIntent(data)
                 val account: GoogleSignInAccount = task.await()
 
-                // Fetch a real OAuth access token for the Sheets scope on IO thread
+                // Fetch a real OAuth access token for Sheets + Drive scopes on IO thread
                 val token = withContext(Dispatchers.IO) {
                     GoogleAuthUtil.getToken(
                         context,
                         account.account!!,
-                        "oauth2:${AuthManager.SHEETS_SCOPE}"
+                        AuthManager.TOKEN_SCOPE
                     )
                 }
 

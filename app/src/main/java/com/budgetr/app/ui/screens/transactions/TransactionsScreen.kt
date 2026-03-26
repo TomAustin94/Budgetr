@@ -1,6 +1,5 @@
 package com.budgetr.app.ui.screens.transactions
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,19 +11,25 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -38,17 +43,20 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetr.app.data.model.SheetTab
+import com.budgetr.app.data.model.SortOrder
 import com.budgetr.app.data.model.Transaction
 import com.budgetr.app.data.model.TransactionCategory
 import com.budgetr.app.ui.theme.ExpenseRed
@@ -60,11 +68,12 @@ import com.budgetr.app.util.toCurrencyString
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionsScreen(
-    onNavigateBack: () -> Unit,
     viewModel: TransactionsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showResetConfirm by remember { mutableStateOf(false) }
+    var sortMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let {
@@ -77,7 +86,9 @@ fun TransactionsScreen(
         AddEditTransactionSheet(
             existingTransaction = uiState.transactionToEdit,
             currentTab = uiState.selectedTab,
+            addSaveCount = uiState.addSaveCount,
             onSave = viewModel::saveTransaction,
+            onSaveTransfer = viewModel::saveTransfer,
             onDismiss = viewModel::dismissSheet
         )
     }
@@ -98,13 +109,62 @@ fun TransactionsScreen(
         )
     }
 
+    if (showResetConfirm) {
+        AlertDialog(
+            onDismissRequest = { showResetConfirm = false },
+            title = { Text("Reset to Fixed Transactions") },
+            text = { Text("This will permanently delete all One Off Cost transactions across all accounts. Fixed costs and income will remain.\n\nThis cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showResetConfirm = false
+                    viewModel.resetToFixedTransactions()
+                }) {
+                    Text("Delete One Off Costs", color = ExpenseRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Transactions") },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                actions = {
+                    // Sort button
+                    Box {
+                        IconButton(onClick = { sortMenuExpanded = true }) {
+                            Icon(Icons.Default.FilterList, contentDescription = "Sort")
+                        }
+                        DropdownMenu(
+                            expanded = sortMenuExpanded,
+                            onDismissRequest = { sortMenuExpanded = false }
+                        ) {
+                            SortOrder.entries.forEach { order ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = order.displayName,
+                                            fontWeight = if (uiState.sortOrder == order) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        viewModel.setSortOrder(order)
+                                        sortMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    // Reset button
+                    IconButton(onClick = { showResetConfirm = true }, enabled = !uiState.isResetting) {
+                        if (uiState.isResetting) {
+                            CircularProgressIndicator(modifier = androidx.compose.ui.Modifier.padding(8.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.RestartAlt, contentDescription = "Reset to fixed transactions", tint = ExpenseRed)
+                        }
                     }
                 }
             )
@@ -132,9 +192,21 @@ fun TransactionsScreen(
                 }
             }
 
+            // Search bar
+            OutlinedTextField(
+                value = uiState.searchQuery,
+                onValueChange = viewModel::setSearchQuery,
+                placeholder = { Text("Search transactions...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                singleLine = true
+            )
+
             // Category filters
             LazyRow(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 item {
@@ -169,7 +241,8 @@ fun TransactionsScreen(
                 if (uiState.transactions.isEmpty() && !uiState.isRefreshing) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
-                            text = "No transactions found.\nPull down to refresh.",
+                            text = if (uiState.searchQuery.isNotBlank()) "No matching transactions."
+                                   else "No transactions found.\nPull down to refresh.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
@@ -218,7 +291,7 @@ private fun TransactionItem(
     }
 
     Card(
-        modifier = Modifier
+        modifier = androidx.compose.ui.Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 2.dp),
         colors = CardDefaults.cardColors(
@@ -227,13 +300,13 @@ private fun TransactionItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
         Row(
-            modifier = Modifier
+            modifier = androidx.compose.ui.Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
                 Text(
                     text = transaction.info,
                     style = MaterialTheme.typography.bodyLarge,
@@ -265,7 +338,7 @@ private fun TransactionItem(
                 style = MaterialTheme.typography.titleMedium,
                 color = amountColor,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 8.dp)
+                modifier = androidx.compose.ui.Modifier.padding(horizontal = 8.dp)
             )
 
             Row {

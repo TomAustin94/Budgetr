@@ -3,6 +3,8 @@ package com.budgetr.app.data.repository
 import com.budgetr.app.data.api.BatchUpdateRequest
 import com.budgetr.app.data.api.DeleteDimensionRequest
 import com.budgetr.app.data.api.DimensionRange
+import com.budgetr.app.data.api.DriveFile
+import com.budgetr.app.data.api.GoogleDriveApi
 import com.budgetr.app.data.api.GoogleSheetsApi
 import com.budgetr.app.data.api.Request
 import com.budgetr.app.data.api.ValueRange
@@ -17,10 +19,13 @@ import com.budgetr.app.data.model.TransactionCategory
 import com.budgetr.app.util.PreferencesManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlin.math.ceil
+import kotlin.math.floor
 import javax.inject.Inject
 
 class SheetsRepositoryImpl @Inject constructor(
     private val api: GoogleSheetsApi,
+    private val driveApi: GoogleDriveApi,
     private val transactionDao: TransactionDao,
     private val accountBalanceDao: AccountBalanceDao,
     private val prefs: PreferencesManager
@@ -97,30 +102,30 @@ class SheetsRepositoryImpl @Inject constructor(
 
     override suspend fun addTransaction(transaction: Transaction) {
         val spreadsheetId = prefs.getSpreadsheetId() ?: return
-        val range = "${transaction.sheetTab.sheetName}!A:D"
-        val row = listOf(
-            listOf(
-                transaction.date,
-                transaction.info,
-                transaction.amount.toString(),
-                transaction.category.displayName
-            )
-        )
+        val range = "${transaction.sheetTab.sheetName}!A:E"
+        val rounded = roundedAmount(transaction.amount, transaction.category)
+        val row = listOf(listOf(
+            transaction.date,
+            transaction.info,
+            transaction.amount.toString(),
+            transaction.category.displayName,
+            rounded.toString()
+        ))
         api.appendValues(spreadsheetId, range, body = ValueRange(values = row))
         refreshTransactions(transaction.sheetTab)
     }
 
     override suspend fun updateTransaction(transaction: Transaction) {
         val spreadsheetId = prefs.getSpreadsheetId() ?: return
-        val range = "${transaction.sheetTab.sheetName}!A${transaction.rowIndex}:D${transaction.rowIndex}"
-        val row = listOf(
-            listOf(
-                transaction.date,
-                transaction.info,
-                transaction.amount.toString(),
-                transaction.category.displayName
-            )
-        )
+        val range = "${transaction.sheetTab.sheetName}!A${transaction.rowIndex}:E${transaction.rowIndex}"
+        val rounded = roundedAmount(transaction.amount, transaction.category)
+        val row = listOf(listOf(
+            transaction.date,
+            transaction.info,
+            transaction.amount.toString(),
+            transaction.category.displayName,
+            rounded.toString()
+        ))
         api.updateValues(spreadsheetId, range, body = ValueRange(values = row))
         refreshTransactions(transaction.sheetTab)
     }
@@ -146,6 +151,41 @@ class SheetsRepositoryImpl @Inject constructor(
             )
         )
         refreshTransactions(transaction.sheetTab)
+    }
+
+    override suspend fun deleteOneOffTransactions(sheetTab: SheetTab) {
+        val spreadsheetId = prefs.getSpreadsheetId() ?: return
+        val sheetId = resolveSheetId(sheetTab)
+
+        // Get ONE_OFF_COST rows sorted descending so high indices delete first (prevents index shifting)
+        val oneOffEntities = transactionDao.getTransactionsByTabSync(sheetTab.name)
+            .filter { it.category == TransactionCategory.ONE_OFF_COST.name }
+            .sortedByDescending { it.rowIndex }
+
+        if (oneOffEntities.isEmpty()) return
+
+        val requests = oneOffEntities.map { entity ->
+            val rowIdx = entity.rowIndex - 1 // 0-based
+            Request(
+                deleteDimension = DeleteDimensionRequest(
+                    range = DimensionRange(sheetId = sheetId, startIndex = rowIdx, endIndex = rowIdx + 1)
+                )
+            )
+        }
+        api.batchUpdate(spreadsheetId, BatchUpdateRequest(requests = requests))
+        refreshTransactions(sheetTab)
+    }
+
+    override suspend fun listSpreadsheets(): List<DriveFile> =
+        driveApi.listFiles().files ?: emptyList()
+
+    // Replicates: =IF(OR(EQ(D,"Income"),EQ(D,"Transfer")), C, IF(C<0, ROUNDUP(C,0), C))
+    // ROUNDUP rounds away from zero, so -2.99 → -3, 2.99 → 3
+    private fun roundedAmount(amount: Double, category: TransactionCategory): Double {
+        if (category == TransactionCategory.INCOME || category == TransactionCategory.TRANSFER) {
+            return amount
+        }
+        return if (amount < 0) floor(amount) else ceil(amount)
     }
 
     private fun TransactionEntity.toTransaction() = Transaction(

@@ -1,6 +1,7 @@
 package com.budgetr.app.di
 
 import com.budgetr.app.data.api.AuthInterceptor
+import com.budgetr.app.data.api.GoogleDriveApi
 import com.budgetr.app.data.api.GoogleSheetsApi
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
@@ -12,6 +13,7 @@ import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
@@ -19,6 +21,7 @@ import javax.inject.Singleton
 object NetworkModule {
 
     private const val SHEETS_BASE_URL = "https://sheets.googleapis.com/v4/"
+    private const val DRIVE_BASE_URL = "https://www.googleapis.com/drive/v3/"
 
     @Provides
     @Singleton
@@ -40,7 +43,8 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+    @Named("sheets")
+    fun provideSheetsRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
         Retrofit.Builder()
             .baseUrl(SHEETS_BASE_URL)
             .client(okHttpClient)
@@ -49,6 +53,21 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideGoogleSheetsApi(retrofit: Retrofit): GoogleSheetsApi =
+    @Named("drive")
+    fun provideDriveRetrofit(okHttpClient: OkHttpClient, moshi: Moshi): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(DRIVE_BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideGoogleSheetsApi(@Named("sheets") retrofit: Retrofit): GoogleSheetsApi =
         retrofit.create(GoogleSheetsApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideGoogleDriveApi(@Named("drive") retrofit: Retrofit): GoogleDriveApi =
+        retrofit.create(GoogleDriveApi::class.java)
 }

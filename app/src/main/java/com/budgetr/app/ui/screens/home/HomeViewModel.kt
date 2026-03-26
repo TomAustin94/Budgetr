@@ -10,11 +10,9 @@ import com.budgetr.app.data.repository.SheetsRepository
 import com.budgetr.app.util.AuthManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,7 +23,7 @@ data class HomeUiState(
     val accountBalances: List<AccountBalance> = emptyList(),
     val totalIncome: Double = 0.0,
     val totalOutgoings: Double = 0.0,
-    val remainingBudget: Double = 0.0,
+    val totalAvailable: Double = 0.0,
     val error: String? = null,
     val userName: String? = null
 )
@@ -59,14 +57,17 @@ class HomeViewModel @Inject constructor(
                 val outgoings = allTx
                     .filter { it.category != TransactionCategory.INCOME && it.category != TransactionCategory.TRANSFER }
                     .sumOf { kotlin.math.abs(it.amount) }
-                Triple(balances, income, outgoings)
-            }.collect { (balances, income, outgoings) ->
+                // Available money = sum of actual account balances (avoids double-counting transfers)
+                val totalAvailable = balances.sumOf { it.remainingBalance }
+                Triple(Pair(balances, totalAvailable), income, outgoings)
+            }.collect { (balanceData, income, outgoings) ->
+                val (balances, totalAvailable) = balanceData
                 _uiState.update {
                     it.copy(
                         accountBalances = balances,
                         totalIncome = income,
                         totalOutgoings = outgoings,
-                        remainingBudget = income - outgoings
+                        totalAvailable = totalAvailable
                     )
                 }
             }
