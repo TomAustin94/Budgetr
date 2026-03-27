@@ -63,7 +63,7 @@ class AccountBalancesViewModel @Inject constructor(
             try {
                 val wasReset = repository.checkAndProcessNewPayPeriod()
                 if (wasReset) {
-                    _uiState.update { it.copy(successMessage = "New pay period started — one-off costs cleared") }
+                    _uiState.update { it.copy(successMessage = "New pay period started — balances rolled over and one-off costs cleared") }
                 }
             } catch (_: Exception) {}
         }

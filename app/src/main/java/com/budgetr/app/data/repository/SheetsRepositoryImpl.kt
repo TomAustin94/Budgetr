@@ -331,7 +331,21 @@ class SheetsRepositoryImpl @Inject constructor(
 
         if (lastProcessed == currentPeriodStart) return false
 
-        // New pay period detected — delete all one-off costs
+        // Snapshot current balances as rollover BEFORE clearing one-off costs,
+        // so the carried-over amount reflects the true end-of-period balance.
+        val balances = accountBalanceDao.getAllSync()
+        val today = SimpleDateFormat("dd/MM/yyyy", Locale.UK).format(java.util.Date())
+        balances.forEach { entity ->
+            balanceRolloverDao.insertOrReplace(
+                BalanceRolloverEntity(
+                    account = entity.account,
+                    rolloverAmount = entity.remainingBalance,
+                    recordedDate = today
+                )
+            )
+        }
+
+        // Now delete all one-off costs for the new pay period
         SheetTab.entries.forEach { tab ->
             try { deleteOneOffTransactions(tab) } catch (_: Exception) {}
         }
