@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,6 +61,41 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var showSignOutConfirm by remember { mutableStateOf(false) }
+
+    // Pay day picker dialog
+    if (uiState.showPayDayPicker) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissPayDayPicker,
+            title = { Text("Set Pay Day") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("Select the day of the month you receive your salary. If it falls on a weekend, the previous Friday is used.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyColumn(modifier = Modifier.height(280.dp)) {
+                        items((1..28).toList()) { day ->
+                            ListItem(
+                                headlineContent = {
+                                    Text(
+                                        text = "Day $day",
+                                        fontWeight = if (day == uiState.payDay) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                trailingContent = if (day == uiState.payDay) {
+                                    { Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = IncomeGreen) }
+                                } else null,
+                                modifier = Modifier.clickable { viewModel.setPayDay(day) }
+                            )
+                            HorizontalDivider()
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissPayDayPicker) { Text("Cancel") }
+            }
+        )
+    }
 
     LaunchedEffect(uiState.savedMessage) {
         uiState.savedMessage?.let {
@@ -224,6 +260,50 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                     )
+                }
+            }
+
+            // Pay day setting
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Pay Day", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.DateRange,
+                            contentDescription = null,
+                            tint = IncomeGreen,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "Day ${uiState.payDay} of each month",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Text(
+                        text = "If this falls on a weekend, the previous Friday is used for income dates.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+
+                    Button(
+                        onClick = viewModel::showPayDayPicker,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Change Pay Day")
+                    }
                 }
             }
 

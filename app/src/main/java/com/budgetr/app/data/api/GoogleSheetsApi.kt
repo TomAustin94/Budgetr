@@ -45,6 +45,11 @@ interface GoogleSheetsApi {
         @Path("spreadsheetId") spreadsheetId: String,
         @Body body: BatchUpdateRequest
     ): BatchUpdateResponse
+
+    @POST("spreadsheets")
+    suspend fun createSpreadsheet(
+        @Body body: CreateSpreadsheetRequest
+    ): CreatedSpreadsheet
 }
 
 @JsonClass(generateAdapter = true)
@@ -79,7 +84,53 @@ data class BatchUpdateRequest(
 
 @JsonClass(generateAdapter = true)
 data class Request(
-    @Json(name = "deleteDimension") val deleteDimension: DeleteDimensionRequest? = null
+    @Json(name = "deleteDimension") val deleteDimension: DeleteDimensionRequest? = null,
+    @Json(name = "addSheet") val addSheet: AddSheetRequestBody? = null,
+    @Json(name = "updateSheetProperties") val updateSheetProperties: UpdateSheetPropertiesRequest? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class AddSheetRequestBody(
+    @Json(name = "properties") val properties: NewSheetProperties
+)
+
+@JsonClass(generateAdapter = true)
+data class NewSheetProperties(
+    @Json(name = "title") val title: String
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateSheetPropertiesRequest(
+    @Json(name = "properties") val properties: UpdateSheetProps,
+    @Json(name = "fields") val fields: String = "title"
+)
+
+@JsonClass(generateAdapter = true)
+data class UpdateSheetProps(
+    @Json(name = "sheetId") val sheetId: Int,
+    @Json(name = "title") val title: String
+)
+
+@JsonClass(generateAdapter = true)
+data class CreateSpreadsheetRequest(
+    @Json(name = "properties") val properties: SpreadsheetTitleProperties,
+    @Json(name = "sheets") val sheets: List<SheetSpec>? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class SpreadsheetTitleProperties(
+    @Json(name = "title") val title: String
+)
+
+@JsonClass(generateAdapter = true)
+data class SheetSpec(
+    @Json(name = "properties") val properties: NewSheetProperties
+)
+
+@JsonClass(generateAdapter = true)
+data class CreatedSpreadsheet(
+    @Json(name = "spreadsheetId") val spreadsheetId: String,
+    @Json(name = "spreadsheetUrl") val spreadsheetUrl: String? = null
 )
 
 @JsonClass(generateAdapter = true)

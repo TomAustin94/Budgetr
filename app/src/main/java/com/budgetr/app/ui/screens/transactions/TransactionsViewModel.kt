@@ -7,6 +7,7 @@ import com.budgetr.app.data.model.SortOrder
 import com.budgetr.app.data.model.Transaction
 import com.budgetr.app.data.model.TransactionCategory
 import com.budgetr.app.data.repository.SheetsRepository
+import com.budgetr.app.util.PreferencesManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,16 +31,18 @@ data class TransactionsUiState(
     val transactionToEdit: Transaction? = null,
     val showAddSheet: Boolean = false,
     val addSaveCount: Int = 0,
-    val isResetting: Boolean = false
+    val isResetting: Boolean = false,
+    val payDay: Int = 26
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
-    private val repository: SheetsRepository
+    private val repository: SheetsRepository,
+    private val prefs: PreferencesManager
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TransactionsUiState())
+    private val _uiState = MutableStateFlow(TransactionsUiState(payDay = prefs.getPayDay()))
     val uiState: StateFlow<TransactionsUiState> = _uiState.asStateFlow()
 
     private val selectedTabFlow = MutableStateFlow(SheetTab.MONZO)

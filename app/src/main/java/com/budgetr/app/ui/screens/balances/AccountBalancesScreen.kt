@@ -4,21 +4,39 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Loop
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
@@ -26,14 +44,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetr.app.data.model.AccountBalance
+import com.budgetr.app.data.model.BalanceRollover
 import com.budgetr.app.ui.theme.ExpenseRed
 import com.budgetr.app.ui.theme.IncomeGreen
 import com.budgetr.app.util.toCurrencyString
@@ -45,6 +65,7 @@ fun AccountBalancesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let {
@@ -53,9 +74,133 @@ fun AccountBalancesScreen(
         }
     }
 
+    LaunchedEffect(uiState.successMessage) {
+        uiState.successMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSuccessMessage()
+        }
+    }
+
+    // Rename dialog
+    uiState.renameAccount?.let { account ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissRenameDialog,
+            title = { Text("Rename Account") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Renaming will also update the Google Sheet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    OutlinedTextField(
+                        value = uiState.renameText,
+                        onValueChange = viewModel::setRenameText,
+                        label = { Text("Account name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmRename,
+                    enabled = uiState.renameText.isNotBlank() && !uiState.isRenaming
+                ) {
+                    if (uiState.isRenaming) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissRenameDialog) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Add account dialog
+    if (uiState.showAddAccount) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissAddAccountDialog,
+            title = { Text("New Account") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("This creates a new worksheet in your Google Sheet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    OutlinedTextField(
+                        value = uiState.newAccountName,
+                        onValueChange = viewModel::setNewAccountName,
+                        label = { Text("Account name") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmAddAccount,
+                    enabled = uiState.newAccountName.isNotBlank() && !uiState.isAddingAccount
+                ) {
+                    if (uiState.isAddingAccount) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissAddAccountDialog) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Rollover edit dialog
+    uiState.rolloverEditAccount?.let { accountName ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissRolloverEditDialog,
+            title = { Text("Edit Rollover for $accountName") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Enter the balance carried over from the previous pay period.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    OutlinedTextField(
+                        value = uiState.rolloverEditText,
+                        onValueChange = viewModel::setRolloverEditText,
+                        label = { Text("Rollover amount (£)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmRolloverEdit,
+                    enabled = !uiState.isRecordingRollover
+                ) {
+                    if (uiState.isRecordingRollover) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissRolloverEditDialog) { Text("Cancel") }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Account Balances") })
+            TopAppBar(
+                title = { Text("Account Balances") },
+                scrollBehavior = scrollBehavior,
+                actions = {
+                    IconButton(
+                        onClick = viewModel::recordAllRollovers,
+                        enabled = uiState.balances.isNotEmpty() && !uiState.isRecordingRollover
+                    ) {
+                        Icon(Icons.Default.Loop, contentDescription = "Record pay period rollover", tint = IncomeGreen)
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = viewModel::showAddAccountDialog) {
+                Icon(Icons.Default.Add, contentDescription = "Add account")
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -89,8 +234,16 @@ fun AccountBalancesScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(uiState.balances) { balance ->
-                        AccountBalanceDetailCard(balance)
+                        val rollover = uiState.rollovers.find { it.account == balance.account }
+                        AccountBalanceDetailCard(
+                            balance = balance,
+                            rollover = rollover,
+                            onRename = { viewModel.showRenameDialog(balance) },
+                            onEditRollover = { viewModel.showRolloverEditDialog(balance.account) },
+                            onDeleteRollover = { rollover?.let { viewModel.deleteRollover(balance.account) } }
+                        )
                     }
+                    item { Spacer(Modifier.height(80.dp)) }
                 }
             }
             PullToRefreshContainer(
@@ -106,7 +259,13 @@ fun AccountBalancesScreen(
 }
 
 @Composable
-private fun AccountBalanceDetailCard(balance: AccountBalance) {
+private fun AccountBalanceDetailCard(
+    balance: AccountBalance,
+    rollover: BalanceRollover?,
+    onRename: () -> Unit,
+    onEditRollover: () -> Unit,
+    onDeleteRollover: () -> Unit
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -119,11 +278,26 @@ private fun AccountBalanceDetailCard(balance: AccountBalance) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text(
-                text = balance.account,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = balance.account,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Rename account",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
 
@@ -147,6 +321,62 @@ private fun AccountBalanceDetailCard(balance: AccountBalance) {
                     value = v.toCurrencyString(),
                     valueColor = if (v >= 0) IncomeGreen else ExpenseRed
                 )
+            }
+
+            // Rollover section
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Previous Period Rollover",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                    if (rollover != null) {
+                        Text(
+                            text = rollover.rolloverAmount.toCurrencyString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (rollover.rolloverAmount >= 0) IncomeGreen else ExpenseRed
+                        )
+                        Text(
+                            text = "Recorded ${rollover.recordedDate}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    } else {
+                        Text(
+                            text = "None recorded",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
+                    }
+                }
+                Row {
+                    IconButton(onClick = onEditRollover, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit rollover",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    if (rollover != null) {
+                        IconButton(onClick = onDeleteRollover, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Clear rollover",
+                                tint = ExpenseRed,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             balance.shouldBuySub?.let { rec ->

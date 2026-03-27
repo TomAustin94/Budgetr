@@ -33,9 +33,9 @@ private data class BottomNavItem(
 )
 
 private val bottomNavItems = listOf(
+    BottomNavItem(NavRoutes.ACCOUNT_BALANCES, "Accounts", Icons.Default.AccountBalance),
     BottomNavItem(NavRoutes.HOME, "Home", Icons.Default.Home),
     BottomNavItem(NavRoutes.TRANSACTIONS, "Transactions", Icons.Default.List),
-    BottomNavItem(NavRoutes.ACCOUNT_BALANCES, "Accounts", Icons.Default.AccountBalance),
     BottomNavItem(NavRoutes.SETTINGS, "Settings", Icons.Default.Settings)
 )
 
@@ -67,7 +67,7 @@ fun MainScreen(onSignOut: () -> Unit) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = NavRoutes.HOME,
+            startDestination = NavRoutes.ACCOUNT_BALANCES,
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(NavRoutes.HOME) {

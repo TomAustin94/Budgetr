@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetr.app.util.AuthManager
+import com.budgetr.app.util.PreferencesManager
 import com.google.android.gms.auth.GoogleAuthUtil
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -29,7 +30,8 @@ data class LoginUiState(
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val authManager: AuthManager
+    private val authManager: AuthManager,
+    private val prefs: PreferencesManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(LoginUiState())
@@ -37,7 +39,7 @@ class LoginViewModel @Inject constructor(
 
     fun getSignInIntent(): Intent = authManager.getSignInIntent()
 
-    fun handleSignInResult(data: Intent?, onSuccess: () -> Unit) {
+    fun handleSignInResult(data: Intent?, onSuccess: () -> Unit, onNeedsOnboarding: () -> Unit = {}) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
@@ -55,7 +57,11 @@ class LoginViewModel @Inject constructor(
 
                 authManager.handleSignInResult(account, token)
                 _uiState.update { it.copy(isLoading = false) }
-                onSuccess()
+                if (prefs.hasSpreadsheet()) {
+                    onSuccess()
+                } else {
+                    onNeedsOnboarding()
+                }
             } catch (e: ApiException) {
                 _uiState.update {
                     it.copy(isLoading = false, error = "Sign-in failed: ${e.statusCode}")

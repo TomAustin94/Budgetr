@@ -23,7 +23,9 @@ data class SettingsUiState(
     val availableSheets: List<DriveFile> = emptyList(),
     val isLoadingSheets: Boolean = false,
     val showSheetPicker: Boolean = false,
-    val sheetPickerError: String? = null
+    val sheetPickerError: String? = null,
+    val payDay: Int = 26,
+    val showPayDayPicker: Boolean = false
 )
 
 @HiltViewModel
@@ -38,7 +40,8 @@ class SettingsViewModel @Inject constructor(
             spreadsheetId = prefs.getSpreadsheetId() ?: "",
             spreadsheetName = prefs.getSpreadsheetName() ?: "",
             userEmail = authManager.getUserEmail(),
-            userName = authManager.getUserName()
+            userName = authManager.getUserName(),
+            payDay = prefs.getPayDay()
         )
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
@@ -77,6 +80,23 @@ class SettingsViewModel @Inject constructor(
     fun dismissSheetPicker() = _uiState.update { it.copy(showSheetPicker = false) }
 
     fun clearSavedMessage() = _uiState.update { it.copy(savedMessage = null) }
+
+    fun showPayDayPicker() = _uiState.update { it.copy(showPayDayPicker = true) }
+
+    fun dismissPayDayPicker() = _uiState.update { it.copy(showPayDayPicker = false) }
+
+    fun setPayDay(day: Int) {
+        prefs.setPayDay(day)
+        _uiState.update { it.copy(payDay = day, showPayDayPicker = false, savedMessage = "Pay day set to the ${day}${ordinalSuffix(day)} of each month") }
+    }
+
+    private fun ordinalSuffix(n: Int): String = when {
+        n in 11..13 -> "th"
+        n % 10 == 1 -> "st"
+        n % 10 == 2 -> "nd"
+        n % 10 == 3 -> "rd"
+        else -> "th"
+    }
 
     fun signOut(onComplete: () -> Unit) {
         authManager.signOut(onComplete)

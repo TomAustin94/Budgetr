@@ -34,6 +34,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
+    onNeedsOnboarding: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -41,7 +42,7 @@ fun LoginScreen(
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        viewModel.handleSignInResult(result.data, onLoginSuccess)
+        viewModel.handleSignInResult(result.data, onLoginSuccess, onNeedsOnboarding)
     }
 
     Box(

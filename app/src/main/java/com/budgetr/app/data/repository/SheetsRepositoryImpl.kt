@@ -1,18 +1,28 @@
 package com.budgetr.app.data.repository
 
+import com.budgetr.app.data.api.AddSheetRequestBody
 import com.budgetr.app.data.api.BatchUpdateRequest
+import com.budgetr.app.data.api.CreateSpreadsheetRequest
 import com.budgetr.app.data.api.DeleteDimensionRequest
 import com.budgetr.app.data.api.DimensionRange
 import com.budgetr.app.data.api.DriveFile
 import com.budgetr.app.data.api.GoogleDriveApi
 import com.budgetr.app.data.api.GoogleSheetsApi
+import com.budgetr.app.data.api.NewSheetProperties
 import com.budgetr.app.data.api.Request
+import com.budgetr.app.data.api.SheetSpec
+import com.budgetr.app.data.api.SpreadsheetTitleProperties
+import com.budgetr.app.data.api.UpdateSheetPropertiesRequest
+import com.budgetr.app.data.api.UpdateSheetProps
 import com.budgetr.app.data.api.ValueRange
 import com.budgetr.app.data.local.dao.AccountBalanceDao
+import com.budgetr.app.data.local.dao.BalanceRolloverDao
 import com.budgetr.app.data.local.dao.TransactionDao
 import com.budgetr.app.data.local.entity.AccountBalanceEntity
+import com.budgetr.app.data.local.entity.BalanceRolloverEntity
 import com.budgetr.app.data.local.entity.TransactionEntity
 import com.budgetr.app.data.model.AccountBalance
+import com.budgetr.app.data.model.BalanceRollover
 import com.budgetr.app.data.model.SheetTab
 import com.budgetr.app.data.model.Transaction
 import com.budgetr.app.data.model.TransactionCategory
@@ -28,6 +38,7 @@ class SheetsRepositoryImpl @Inject constructor(
     private val driveApi: GoogleDriveApi,
     private val transactionDao: TransactionDao,
     private val accountBalanceDao: AccountBalanceDao,
+    private val balanceRolloverDao: BalanceRolloverDao,
     private val prefs: PreferencesManager
 ) : SheetsRepository {
 
@@ -45,6 +56,17 @@ class SheetsRepositoryImpl @Inject constructor(
         return sheetIdCache[sheetTab.sheetName] ?: 0
     }
 
+    private suspend fun resolveSheetIdByName(name: String): Int? {
+        sheetIdCache[name]?.let { return it }
+        val spreadsheetId = prefs.getSpreadsheetId() ?: return null
+        val metadata = api.getSpreadsheet(spreadsheetId)
+        sheetIdCache = metadata.sheets
+            ?.mapNotNull { it.properties }
+            ?.associate { it.title to it.sheetId }
+            ?: emptyMap()
+        return sheetIdCache[name]
+    }
+
     override fun getTransactions(sheetTab: SheetTab): Flow<List<Transaction>> =
         transactionDao.getTransactionsByTab(sheetTab.name).map { entities ->
             entities.map { it.toTransaction() }
@@ -53,6 +75,11 @@ class SheetsRepositoryImpl @Inject constructor(
     override fun getAccountBalances(): Flow<List<AccountBalance>> =
         accountBalanceDao.getAll().map { entities ->
             entities.map { it.toAccountBalance() }
+        }
+
+    override fun getBalanceRollovers(): Flow<List<BalanceRollover>> =
+        balanceRolloverDao.getAll().map { entities ->
+            entities.map { BalanceRollover(it.account, it.rolloverAmount, it.recordedDate) }
         }
 
     override suspend fun refreshTransactions(sheetTab: SheetTab) {
@@ -179,10 +206,127 @@ class SheetsRepositoryImpl @Inject constructor(
     override suspend fun listSpreadsheets(): List<DriveFile> =
         driveApi.listFiles().files ?: emptyList()
 
+    override suspend fun createSpreadsheetTemplate(name: String): String {
+        val sheets = listOf(
+            SheetSpec(NewSheetProperties("Cover Sheet")),
+            SheetSpec(NewSheetProperties("Monzo")),
+            SheetSpec(NewSheetProperties("Halifax Debit Card")),
+            SheetSpec(NewSheetProperties("Halifax Credit Card"))
+        )
+        val response = api.createSpreadsheet(
+            CreateSpreadsheetRequest(
+                properties = SpreadsheetTitleProperties(title = name),
+                sheets = sheets
+            )
+        )
+        val spreadsheetId = response.spreadsheetId
+
+        // Add headers to Cover Sheet
+        val coverHeaders = listOf(listOf("Account", "Balance", "Item Cost This Month", "Subscription Cost", "Variance", "Should Buy Sub"))
+        api.updateValues(spreadsheetId, "Cover Sheet!A1:F1", body = ValueRange(values = coverHeaders))
+
+        // Add account rows to Cover Sheet
+        val accountRows = listOf(
+            listOf("Monzo", "0", "0", "0", "0", ""),
+            listOf("Halifax Debit Card", "0", "0", "0", "0", ""),
+            listOf("Halifax Credit Card", "0", "0", "0", "0", "")
+        )
+        api.appendValues(spreadsheetId, "Cover Sheet!A:F", body = ValueRange(values = accountRows))
+
+        // Add headers to each transaction sheet
+        val txHeaders = listOf(listOf("Date", "Info", "Amount", "Category", "RoundedAmount"))
+        listOf("Monzo", "Halifax Debit Card", "Halifax Credit Card").forEach { sheet ->
+            api.updateValues(spreadsheetId, "$sheet!A1:E1", body = ValueRange(values = txHeaders))
+        }
+
+        return spreadsheetId
+    }
+
+    override suspend fun renameAccount(oldName: String, newName: String) {
+        val spreadsheetId = prefs.getSpreadsheetId() ?: return
+
+        // Find the row in Cover Sheet
+        val response = api.getValues(spreadsheetId, "Cover Sheet!A:A")
+        val rows = response.values ?: return
+
+        val rowIndex = rows.indexOfFirst { it.firstOrNull() == oldName }
+        if (rowIndex == -1) return
+        val rowNum = rowIndex + 1 // 1-based
+
+        // Update the name cell in Cover Sheet
+        api.updateValues(
+            spreadsheetId,
+            "Cover Sheet!A$rowNum",
+            body = ValueRange(values = listOf(listOf(newName)))
+        )
+
+        // Rename the corresponding worksheet tab if it exists
+        val sheetId = resolveSheetIdByName(oldName)
+        if (sheetId != null) {
+            api.batchUpdate(
+                spreadsheetId,
+                BatchUpdateRequest(
+                    requests = listOf(
+                        Request(
+                            updateSheetProperties = UpdateSheetPropertiesRequest(
+                                properties = UpdateSheetProps(sheetId = sheetId, title = newName),
+                                fields = "title"
+                            )
+                        )
+                    )
+                )
+            )
+            sheetIdCache = emptyMap()
+        }
+
+        refreshAccountBalances()
+    }
+
+    override suspend fun addAccount(accountName: String) {
+        val spreadsheetId = prefs.getSpreadsheetId() ?: return
+
+        // Create new worksheet tab
+        api.batchUpdate(
+            spreadsheetId,
+            BatchUpdateRequest(
+                requests = listOf(
+                    Request(
+                        addSheet = AddSheetRequestBody(
+                            properties = NewSheetProperties(title = accountName)
+                        )
+                    )
+                )
+            )
+        )
+
+        // Add header row to the new sheet
+        val headers = listOf(listOf("Date", "Info", "Amount", "Category", "RoundedAmount"))
+        api.appendValues(spreadsheetId, "$accountName!A1:E1", body = ValueRange(values = headers))
+
+        // Add account to Cover Sheet
+        val coverRow = listOf(listOf(accountName, "0", "0", "0", "0", ""))
+        api.appendValues(spreadsheetId, "Cover Sheet!A:F", body = ValueRange(values = coverRow))
+
+        sheetIdCache = emptyMap()
+        refreshAccountBalances()
+    }
+
+    override suspend fun recordRollover(account: String, amount: Double, date: String) {
+        balanceRolloverDao.insertOrReplace(
+            BalanceRolloverEntity(account = account, rolloverAmount = amount, recordedDate = date)
+        )
+    }
+
+    override suspend fun deleteRollover(account: String) {
+        balanceRolloverDao.delete(account)
+    }
+
     // Replicates: =IF(OR(EQ(D,"Income"),EQ(D,"Transfer")), C, IF(C<0, ROUNDUP(C,0), C))
     // ROUNDUP rounds away from zero, so -2.99 → -3, 2.99 → 3
     private fun roundedAmount(amount: Double, category: TransactionCategory): Double {
-        if (category == TransactionCategory.INCOME || category == TransactionCategory.TRANSFER) {
+        if (category == TransactionCategory.INCOME ||
+            category == TransactionCategory.SALARY ||
+            category == TransactionCategory.TRANSFER) {
             return amount
         }
         return if (amount < 0) floor(amount) else ceil(amount)

@@ -2,6 +2,7 @@ package com.budgetr.app.data.repository
 
 import com.budgetr.app.data.api.DriveFile
 import com.budgetr.app.data.model.AccountBalance
+import com.budgetr.app.data.model.BalanceRollover
 import com.budgetr.app.data.model.SheetTab
 import com.budgetr.app.data.model.Transaction
 import kotlinx.coroutines.flow.Flow
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 interface SheetsRepository {
     fun getTransactions(sheetTab: SheetTab): Flow<List<Transaction>>
     fun getAccountBalances(): Flow<List<AccountBalance>>
+    fun getBalanceRollovers(): Flow<List<BalanceRollover>>
     suspend fun refreshTransactions(sheetTab: SheetTab)
     suspend fun refreshAccountBalances()
     suspend fun addTransaction(transaction: Transaction)
@@ -16,4 +18,9 @@ interface SheetsRepository {
     suspend fun deleteTransaction(transaction: Transaction)
     suspend fun deleteOneOffTransactions(sheetTab: SheetTab)
     suspend fun listSpreadsheets(): List<DriveFile>
+    suspend fun createSpreadsheetTemplate(name: String): String
+    suspend fun renameAccount(oldName: String, newName: String)
+    suspend fun addAccount(accountName: String)
+    suspend fun recordRollover(account: String, amount: Double, date: String)
+    suspend fun deleteRollover(account: String)
 }
