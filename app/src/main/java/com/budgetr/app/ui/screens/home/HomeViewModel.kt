@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetr.app.data.model.AccountBalance
 import com.budgetr.app.data.model.SheetTab
-import com.budgetr.app.data.model.Transaction
 import com.budgetr.app.data.model.TransactionCategory
 import com.budgetr.app.data.repository.SheetsRepository
 import com.budgetr.app.util.AuthManager
@@ -23,9 +22,20 @@ data class HomeUiState(
     val accountBalances: List<AccountBalance> = emptyList(),
     val totalIncome: Double = 0.0,
     val totalOutgoings: Double = 0.0,
+    val totalFixedCosts: Double = 0.0,
+    val totalOneOffCosts: Double = 0.0,
     val totalAvailable: Double = 0.0,
     val error: String? = null,
     val userName: String? = null
+)
+
+private data class SummaryData(
+    val balances: List<AccountBalance>,
+    val totalAvailable: Double,
+    val income: Double,
+    val outgoings: Double,
+    val fixedCosts: Double,
+    val oneOffCosts: Double
 )
 
 @HiltViewModel
@@ -54,20 +64,26 @@ class HomeViewModel @Inject constructor(
                 val income = allTx
                     .filter { it.category == TransactionCategory.INCOME }
                     .sumOf { it.amount }
+                val fixedCosts = allTx
+                    .filter { it.category == TransactionCategory.FIXED_COST }
+                    .sumOf { kotlin.math.abs(it.amount) }
+                val oneOffCosts = allTx
+                    .filter { it.category == TransactionCategory.ONE_OFF_COST }
+                    .sumOf { kotlin.math.abs(it.amount) }
                 val outgoings = allTx
                     .filter { it.category != TransactionCategory.INCOME && it.category != TransactionCategory.TRANSFER }
                     .sumOf { kotlin.math.abs(it.amount) }
-                // Available money = sum of actual account balances (avoids double-counting transfers)
                 val totalAvailable = balances.sumOf { it.remainingBalance }
-                Triple(Pair(balances, totalAvailable), income, outgoings)
-            }.collect { (balanceData, income, outgoings) ->
-                val (balances, totalAvailable) = balanceData
+                SummaryData(balances, totalAvailable, income, outgoings, fixedCosts, oneOffCosts)
+            }.collect { data ->
                 _uiState.update {
                     it.copy(
-                        accountBalances = balances,
-                        totalIncome = income,
-                        totalOutgoings = outgoings,
-                        totalAvailable = totalAvailable
+                        accountBalances = data.balances,
+                        totalIncome = data.income,
+                        totalOutgoings = data.outgoings,
+                        totalFixedCosts = data.fixedCosts,
+                        totalOneOffCosts = data.oneOffCosts,
+                        totalAvailable = data.totalAvailable
                     )
                 }
             }
