@@ -27,6 +27,7 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import com.budgetr.app.MainActivity
 import com.budgetr.app.data.local.entity.AccountBalanceEntity
 import com.budgetr.app.data.model.TransactionCategory
 import dagger.hilt.android.EntryPointAccessors
@@ -61,15 +62,22 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
 
     val total = balances.sumOf { it.remainingBalance }
 
+    val mainIntent = Intent(context, MainActivity::class.java).apply {
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+    }
+    val openApp = actionStartActivity(mainIntent)
+
     Column(
         modifier = GlanceModifier
             .fillMaxSize()
             .background(bgColor)
-            .padding(10.dp)
+            .padding(12.dp)
     ) {
-        // Header: title + total
+        // Header: title + total — tapping opens the app
         Row(
-            modifier = GlanceModifier.fillMaxWidth(),
+            modifier = GlanceModifier
+                .fillMaxWidth()
+                .clickable(openApp),
             verticalAlignment = Alignment.Vertical.CenterVertically
         ) {
             Text(
@@ -77,7 +85,7 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
                 modifier = GlanceModifier.defaultWeight(),
                 style = TextStyle(
                     color = ColorProvider(Color.White),
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
             )
@@ -85,7 +93,7 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
                 text = formatCurrency(total),
                 style = TextStyle(
                     color = ColorProvider(if (total >= 0) positiveColor else negativeColor),
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold
                 )
             )
@@ -93,16 +101,20 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
 
         Spacer(GlanceModifier.height(6.dp))
 
-        // Per-account balances
+        // Per-account balances — tapping opens the app
         if (balances.isEmpty()) {
             Text(
                 text = "No data — open app to sync",
-                style = TextStyle(color = ColorProvider(subtleWhite), fontSize = 10.sp)
+                modifier = GlanceModifier.clickable(openApp),
+                style = TextStyle(color = ColorProvider(subtleWhite), fontSize = 11.sp)
             )
         } else {
             balances.forEach { account ->
                 Row(
-                    modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp),
+                    modifier = GlanceModifier
+                        .fillMaxWidth()
+                        .padding(vertical = 3.dp)
+                        .clickable(openApp),
                     verticalAlignment = Alignment.Vertical.CenterVertically
                 ) {
                     Text(
@@ -110,7 +122,7 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
                         modifier = GlanceModifier.defaultWeight(),
                         style = TextStyle(
                             color = ColorProvider(subtleWhite),
-                            fontSize = 10.sp
+                            fontSize = 11.sp
                         )
                     )
                     Text(
@@ -119,7 +131,7 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
                             color = ColorProvider(
                                 if (account.remainingBalance >= 0) positiveColor else negativeColor
                             ),
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium
                         )
                     )
@@ -127,7 +139,7 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
             }
         }
 
-        Spacer(GlanceModifier.height(6.dp))
+        Spacer(GlanceModifier.height(8.dp))
 
         // Divider
         Box(
@@ -137,15 +149,14 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
                 .background(dividerColor)
         ) {}
 
-        Spacer(GlanceModifier.height(6.dp))
+        Spacer(GlanceModifier.height(8.dp))
 
-        // Quick-add buttons
+        // Quick-add buttons (larger touch targets)
         Row(modifier = GlanceModifier.fillMaxWidth()) {
             QuickAddButton(context, "One Off", TransactionCategory.ONE_OFF_COST, Color(0xFFFF5252), modifier = GlanceModifier.defaultWeight())
-            Spacer(GlanceModifier.width(5.dp))
+            Spacer(GlanceModifier.width(6.dp))
             QuickAddButton(context, "Fixed", TransactionCategory.FIXED_COST, Color(0xFFFFAB40), modifier = GlanceModifier.defaultWeight())
-            Spacer(GlanceModifier.width(5.dp))
-            // Transfer opens the full-app form (needs destination account picker)
+            Spacer(GlanceModifier.width(6.dp))
             QuickAddButton(context, "Transfer", TransactionCategory.TRANSFER, Color(0xFF90CAF9), fullApp = true, modifier = GlanceModifier.defaultWeight())
         }
     }
@@ -167,7 +178,7 @@ private fun QuickAddButton(
     }
     Box(
         modifier = modifier
-            .height(28.dp)
+            .height(40.dp)
             .background(Color(0x33FFFFFF))
             .clickable(actionStartActivity(intent)),
         contentAlignment = Alignment.Center
@@ -176,7 +187,7 @@ private fun QuickAddButton(
             text = label,
             style = TextStyle(
                 color = ColorProvider(color),
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Medium
             )
         )

@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -91,7 +92,7 @@ fun HomeScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(bottom = paddingValues.calculateBottomPadding())
                 .nestedScroll(pullRefreshState.nestedScrollConnection)
         ) {
             if (uiState.isLoading) {
@@ -106,7 +107,8 @@ fun HomeScreen(
                     item {
                         HomeHeader(
                             userName = uiState.userName,
-                            totalAvailable = uiState.totalAvailable
+                            totalAvailable = uiState.totalAvailable,
+                            topPadding = paddingValues.calculateTopPadding()
                         )
                     }
 
@@ -172,14 +174,14 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(userName: String?, totalAvailable: Double) {
+private fun HomeHeader(userName: String?, totalAvailable: Double, topPadding: Dp) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(topStart = 0.dp, topEnd = 0.dp, bottomEnd = 24.dp, bottomStart = 24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 20.dp, bottom = 28.dp)
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = topPadding + 16.dp, bottom = 28.dp)
         ) {
             Text(
                 text = "Budgetr",
