@@ -24,7 +24,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +66,7 @@ import com.budgetr.app.util.toCurrencyString
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TransactionsScreen(
+    initialTabName: String? = null,
     viewModel: TransactionsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -113,6 +113,10 @@ fun TransactionsScreen(
             TopAppBar(
                 title = { Text("Transactions") },
                 actions = {
+                    // Add transaction button
+                    IconButton(onClick = viewModel::showAddSheet) {
+                        Icon(Icons.Default.Add, contentDescription = "Add transaction", tint = MaterialTheme.colorScheme.primary)
+                    }
                     // Sort button
                     Box {
                         IconButton(onClick = { sortMenuExpanded = true }) {
@@ -140,11 +144,6 @@ fun TransactionsScreen(
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = viewModel::showAddSheet) {
-                Icon(Icons.Default.Add, contentDescription = "Add transaction")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -223,7 +222,7 @@ fun TransactionsScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
-                        contentPadding = PaddingValues(bottom = 88.dp)
+                        contentPadding = PaddingValues(bottom = 24.dp)
                     ) {
                         items(
                             items = uiState.transactions,
@@ -257,7 +256,9 @@ private fun TransactionItem(
     onDelete: () -> Unit
 ) {
     val amountColor = when (transaction.category) {
-        TransactionCategory.INCOME -> IncomeGreen
+        TransactionCategory.INCOME,
+        TransactionCategory.SALARY,
+        TransactionCategory.RECURRING_INCOME -> IncomeGreen
         TransactionCategory.TRANSFER -> TransferGrey
         TransactionCategory.FIXED_COST -> FixedCostOrange
         else -> ExpenseRed

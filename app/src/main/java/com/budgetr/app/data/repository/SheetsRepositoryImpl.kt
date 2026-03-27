@@ -4,6 +4,7 @@ import com.budgetr.app.data.api.AddSheetRequestBody
 import com.budgetr.app.data.api.BatchUpdateRequest
 import com.budgetr.app.data.api.CreateSpreadsheetRequest
 import com.budgetr.app.data.api.DeleteDimensionRequest
+import com.budgetr.app.data.api.DeleteSheetRequest
 import com.budgetr.app.data.api.DimensionRange
 import com.budgetr.app.data.api.DriveFile
 import com.budgetr.app.data.api.GoogleDriveApi
@@ -324,6 +325,51 @@ class SheetsRepositoryImpl @Inject constructor(
         balanceRolloverDao.delete(account)
     }
 
+    override suspend fun deleteAccount(accountName: String) {
+        val spreadsheetId = prefs.getSpreadsheetId() ?: return
+
+        // Delete the row in Cover Sheet
+        val response = api.getValues(spreadsheetId, "Cover Sheet!A:A")
+        val rows = response.values ?: return
+        val rowIndex = rows.indexOfFirst { it.firstOrNull() == accountName }
+        if (rowIndex != -1) {
+            val coverSheetId = resolveSheetIdByName("Cover Sheet") ?: 0
+            api.batchUpdate(
+                spreadsheetId,
+                BatchUpdateRequest(
+                    requests = listOf(
+                        Request(
+                            deleteDimension = DeleteDimensionRequest(
+                                range = DimensionRange(
+                                    sheetId = coverSheetId,
+                                    startIndex = rowIndex,
+                                    endIndex = rowIndex + 1
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        }
+
+        // Delete the worksheet tab if it exists
+        val sheetId = resolveSheetIdByName(accountName)
+        if (sheetId != null) {
+            api.batchUpdate(
+                spreadsheetId,
+                BatchUpdateRequest(
+                    requests = listOf(Request(deleteSheet = DeleteSheetRequest(sheetId = sheetId)))
+                )
+            )
+            sheetIdCache = emptyMap()
+        }
+
+        // Remove from local cache
+        accountBalanceDao.deleteAll()
+        balanceRolloverDao.delete(accountName)
+        refreshAccountBalances()
+    }
+
     override suspend fun checkAndProcessNewPayPeriod(): Boolean {
         val payDay = prefs.getPayDay()
         val currentPeriodStart = resolveCurrentPayPeriodStart(payDay)
@@ -345,12 +391,58 @@ class SheetsRepositoryImpl @Inject constructor(
             )
         }
 
-        // Now delete all one-off costs for the new pay period
+        val spreadsheetId = prefs.getSpreadsheetId()
+
+        // Carry over FIXED_COST and TRANSFER (update date to new pay date),
+        // and RECURRING_INCOME (update date to the same day-of-month in the current period).
+        if (spreadsheetId != null) {
+            SheetTab.entries.forEach { tab ->
+                try {
+                    val tabEntities = transactionDao.getTransactionsByTabSync(tab.name)
+                    tabEntities.forEach { entity ->
+                        val newDate = when (entity.category) {
+                            TransactionCategory.FIXED_COST.name,
+                            TransactionCategory.TRANSFER.name -> currentPeriodStart
+                            TransactionCategory.RECURRING_INCOME.name -> {
+                                val day = entity.date.split("/").firstOrNull()?.toIntOrNull() ?: 1
+                                resolveRecurringDate(day)
+                            }
+                            else -> null
+                        }
+                        if (newDate != null && newDate != entity.date) {
+                            val range = "${tab.sheetName}!A${entity.rowIndex}"
+                            api.updateValues(
+                                spreadsheetId, range,
+                                body = ValueRange(values = listOf(listOf(newDate)))
+                            )
+                        }
+                    }
+                    // Refresh local cache after date updates
+                    refreshTransactions(tab)
+                } catch (_: Exception) {}
+            }
+        }
+
+        // Delete all one-off costs for the new pay period
         SheetTab.entries.forEach { tab ->
             try { deleteOneOffTransactions(tab) } catch (_: Exception) {}
         }
         prefs.setLastPayPeriodStart(currentPeriodStart)
         return true
+    }
+
+    /** Calculates the date for a recurring item that falls on [dayOfMonth] in the current month,
+     *  with Saturday → Friday and Sunday → Friday weekend adjustment. */
+    private fun resolveRecurringDate(dayOfMonth: Int): String {
+        val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
+        val cal = Calendar.getInstance()
+        val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+        cal.set(Calendar.DAY_OF_MONTH, minOf(dayOfMonth, maxDay))
+        when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.SATURDAY -> cal.add(Calendar.DAY_OF_MONTH, -1)
+            Calendar.SUNDAY -> cal.add(Calendar.DAY_OF_MONTH, -2)
+        }
+        return fmt.format(cal.time)
     }
 
     /** Calculates the effective start date of the current pay period (with weekend → Friday adjustment). */
@@ -377,6 +469,7 @@ class SheetsRepositoryImpl @Inject constructor(
     private fun roundedAmount(amount: Double, category: TransactionCategory): Double {
         if (category == TransactionCategory.INCOME ||
             category == TransactionCategory.SALARY ||
+            category == TransactionCategory.RECURRING_INCOME ||
             category == TransactionCategory.TRANSFER) {
             return amount
         }

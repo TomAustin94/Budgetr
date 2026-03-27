@@ -1,5 +1,9 @@
 package com.budgetr.app.ui.screens.balances
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -20,11 +25,11 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Loop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,6 +50,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
@@ -54,13 +63,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetr.app.data.model.AccountBalance
 import com.budgetr.app.data.model.BalanceRollover
+import com.budgetr.app.data.model.SheetTab
 import com.budgetr.app.ui.theme.ExpenseRed
+import com.budgetr.app.ui.theme.FixedCostOrange
 import com.budgetr.app.ui.theme.IncomeGreen
 import com.budgetr.app.util.toCurrencyString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountBalancesScreen(
+    onNavigateToTransactions: ((SheetTab) -> Unit)? = null,
     viewModel: AccountBalancesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -145,6 +157,33 @@ fun AccountBalancesScreen(
         )
     }
 
+    // Delete account confirmation dialog
+    uiState.deleteAccount?.let { account ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeleteAccountDialog,
+            title = { Text("Delete Account") },
+            text = {
+                Text(
+                    "Delete \"${account.account}\"? This will permanently remove the account and all its transactions from your Google Sheet. This cannot be undone.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmDeleteAccount,
+                    enabled = !uiState.isDeletingAccount,
+                    colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed)
+                ) {
+                    if (uiState.isDeletingAccount) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    else Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeleteAccountDialog) { Text("Cancel") }
+            }
+        )
+    }
+
     // Rollover edit dialog
     uiState.rolloverEditAccount?.let { accountName ->
         AlertDialog(
@@ -185,7 +224,7 @@ fun AccountBalancesScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Account Balances") },
+                title = { Text("Accounts") },
                 scrollBehavior = scrollBehavior,
                 actions = {
                     IconButton(
@@ -194,13 +233,11 @@ fun AccountBalancesScreen(
                     ) {
                         Icon(Icons.Default.Loop, contentDescription = "Record pay period rollover", tint = IncomeGreen)
                     }
+                    IconButton(onClick = viewModel::showAddAccountDialog) {
+                        Icon(Icons.Default.Add, contentDescription = "Add account", tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = viewModel::showAddAccountDialog) {
-                Icon(Icons.Default.Add, contentDescription = "Add account")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
@@ -228,22 +265,45 @@ fun AccountBalancesScreen(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp),
+                    modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Summary header card
+                    if (uiState.totalAvailable != 0.0 || uiState.totalIncome != 0.0) {
+                        item {
+                            SummaryHeaderCard(
+                                totalAvailable = uiState.totalAvailable,
+                                totalIncome = uiState.totalIncome,
+                                totalOutgoings = uiState.totalOutgoings,
+                                modifier = Modifier.padding(horizontal = 16.dp).padding(top = 16.dp)
+                            )
+                        }
+                    }
+
+                    item {
+                        Text(
+                            text = "Your Accounts",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                        )
+                    }
+
                     items(uiState.balances) { balance ->
                         val rollover = uiState.rollovers.find { it.account == balance.account }
+                        val matchingTab = SheetTab.entries.find { it.sheetName == balance.account }
                         AccountBalanceDetailCard(
                             balance = balance,
                             rollover = rollover,
+                            isClickable = matchingTab != null && onNavigateToTransactions != null,
+                            onClick = { matchingTab?.let { onNavigateToTransactions?.invoke(it) } },
                             onRename = { viewModel.showRenameDialog(balance) },
+                            onDelete = { viewModel.showDeleteAccountDialog(balance) },
                             onEditRollover = { viewModel.showRolloverEditDialog(balance.account) },
                             onDeleteRollover = { rollover?.let { viewModel.deleteRollover(balance.account) } }
                         )
                     }
-                    item { Spacer(Modifier.height(80.dp)) }
+                    item { Spacer(Modifier.height(24.dp)) }
                 }
             }
             PullToRefreshContainer(
@@ -259,15 +319,136 @@ fun AccountBalancesScreen(
 }
 
 @Composable
+private fun SummaryHeaderCard(
+    totalAvailable: Double,
+    totalIncome: Double,
+    totalOutgoings: Double,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Column {
+                Text(
+                    text = "Total Available",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = totalAvailable.toCurrencyString(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (totalAvailable >= 0) IncomeGreen else ExpenseRed
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Income",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = totalIncome.toCurrencyString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = IncomeGreen
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Outgoings",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = totalOutgoings.toCurrencyString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ExpenseRed
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Remaining",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                    )
+                    val remaining = totalIncome - totalOutgoings
+                    Text(
+                        text = remaining.toCurrencyString(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (remaining >= 0) IncomeGreen else ExpenseRed
+                    )
+                }
+            }
+
+            // Mini spending bar
+            if (totalIncome > 0) {
+                val spentFraction = (totalOutgoings / totalIncome).coerceIn(0.0, 1.0).toFloat()
+                val animatedProgress = remember(totalOutgoings, totalIncome) { Animatable(0f) }
+                LaunchedEffect(spentFraction) {
+                    animatedProgress.snapTo(0f)
+                    animatedProgress.animateTo(spentFraction, animationSpec = tween(800))
+                }
+                val barColor = if (spentFraction > 0.9f) ExpenseRed else FixedCostOrange
+                val trackColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f)
+                val currentBarColor = barColor
+                val currentTrackColor = trackColor
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                ) {
+                    val radius = 3.dp.toPx()
+                    drawRoundRect(color = currentTrackColor, size = size, cornerRadius = CornerRadius(radius))
+                    if (animatedProgress.value > 0f) {
+                        drawRoundRect(
+                            color = currentBarColor,
+                            size = Size(size.width * animatedProgress.value, size.height),
+                            cornerRadius = CornerRadius(radius)
+                        )
+                    }
+                }
+                Text(
+                    text = "${(spentFraction * 100).toInt()}% of income spent",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun AccountBalanceDetailCard(
     balance: AccountBalance,
     rollover: BalanceRollover?,
+    isClickable: Boolean,
+    onClick: () -> Unit,
     onRename: () -> Unit,
+    onDelete: () -> Unit,
     onEditRollover: () -> Unit,
     onDeleteRollover: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .then(if (isClickable) Modifier.clickable(onClick = onClick) else Modifier),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -283,12 +464,33 @@ private fun AccountBalanceDetailCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = balance.account,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (isClickable) {
+                        Text(
+                            text = "Tap to view transactions",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                        )
+                    }
+                }
                 Text(
-                    text = balance.account,
-                    style = MaterialTheme.typography.titleMedium,
+                    text = balance.remainingBalance.toCurrencyString(),
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
+                    color = if (balance.remainingBalance >= 0) IncomeGreen else ExpenseRed
                 )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 IconButton(onClick = onRename, modifier = Modifier.size(32.dp)) {
                     Icon(
                         Icons.Default.Edit,
@@ -297,15 +499,17 @@ private fun AccountBalanceDetailCard(
                         modifier = Modifier.size(18.dp)
                     )
                 }
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete account",
+                        tint = ExpenseRed,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
-
-            BalanceRow(
-                label = "Balance",
-                value = balance.remainingBalance.toCurrencyString(),
-                valueColor = if (balance.remainingBalance >= 0) IncomeGreen else ExpenseRed
-            )
 
             balance.itemCostThisMonth?.let { cost ->
                 BalanceRow(label = "This Month", value = cost.toCurrencyString())

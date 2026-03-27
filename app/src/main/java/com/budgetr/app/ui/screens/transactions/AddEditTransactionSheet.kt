@@ -118,6 +118,7 @@ fun AddEditTransactionSheet(
                 TransactionCategory.FIXED_COST,
                 TransactionCategory.SALARY -> date = getPayDate(payDay)
                 TransactionCategory.TRANSFER -> date = if (applyPayDate) getPayDate(payDay) else today
+                TransactionCategory.RECURRING_INCOME -> date = today // user picks their recurring day via date picker
                 else -> {
                     date = today
                     applyPayDate = false
@@ -140,7 +141,11 @@ fun AddEditTransactionSheet(
             transferToTab = null
             applyPayDate = false
             savedBanner = true
-            date = if (category == TransactionCategory.FIXED_COST || category == TransactionCategory.SALARY) getPayDate(payDay) else today
+            date = when (category) {
+                TransactionCategory.FIXED_COST, TransactionCategory.SALARY -> getPayDate(payDay)
+                TransactionCategory.RECURRING_INCOME -> today
+                else -> today
+            }
         }
     }
 
@@ -218,7 +223,10 @@ fun AddEditTransactionSheet(
                 readOnly = true,
                 trailingIcon = {
                     TextButton(onClick = { showDatePicker = true }) { Text("Pick") }
-                }
+                },
+                supportingText = if (category == TransactionCategory.RECURRING_INCOME) {
+                    { Text("Pick the day this income recurs each month (e.g. 9th). Fridays replace weekends.", style = MaterialTheme.typography.labelSmall) }
+                } else null
             )
 
             // Description
@@ -385,7 +393,12 @@ fun AddEditTransactionSheet(
 
                 Button(
                     onClick = {
-                        val signedAmount = if (category == TransactionCategory.INCOME || category == TransactionCategory.SALARY) parsedAmount else -parsedAmount
+                        val signedAmount = when (category) {
+                            TransactionCategory.INCOME,
+                            TransactionCategory.SALARY,
+                            TransactionCategory.RECURRING_INCOME -> parsedAmount
+                            else -> -parsedAmount
+                        }
 
                         if (isTransfer && !isEdit && transferToTab != null) {
                             val source = Transaction(

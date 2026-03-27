@@ -86,7 +86,13 @@ data class BatchUpdateRequest(
 data class Request(
     @Json(name = "deleteDimension") val deleteDimension: DeleteDimensionRequest? = null,
     @Json(name = "addSheet") val addSheet: AddSheetRequestBody? = null,
-    @Json(name = "updateSheetProperties") val updateSheetProperties: UpdateSheetPropertiesRequest? = null
+    @Json(name = "updateSheetProperties") val updateSheetProperties: UpdateSheetPropertiesRequest? = null,
+    @Json(name = "deleteSheet") val deleteSheet: DeleteSheetRequest? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class DeleteSheetRequest(
+    @Json(name = "sheetId") val sheetId: Int
 )
 
 @JsonClass(generateAdapter = true)
