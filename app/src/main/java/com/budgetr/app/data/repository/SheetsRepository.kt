@@ -23,4 +23,6 @@ interface SheetsRepository {
     suspend fun addAccount(accountName: String)
     suspend fun recordRollover(account: String, amount: Double, date: String)
     suspend fun deleteRollover(account: String)
+    /** Checks if a new pay period has started and, if so, deletes all one-off cost transactions. Returns true if a reset was performed. */
+    suspend fun checkAndProcessNewPayPeriod(): Boolean
 }

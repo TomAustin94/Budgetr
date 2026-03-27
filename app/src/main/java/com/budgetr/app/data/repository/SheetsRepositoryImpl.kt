@@ -29,6 +29,9 @@ import com.budgetr.app.data.model.TransactionCategory
 import com.budgetr.app.util.PreferencesManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import kotlin.math.ceil
 import kotlin.math.floor
 import javax.inject.Inject
@@ -319,6 +322,40 @@ class SheetsRepositoryImpl @Inject constructor(
 
     override suspend fun deleteRollover(account: String) {
         balanceRolloverDao.delete(account)
+    }
+
+    override suspend fun checkAndProcessNewPayPeriod(): Boolean {
+        val payDay = prefs.getPayDay()
+        val currentPeriodStart = resolveCurrentPayPeriodStart(payDay)
+        val lastProcessed = prefs.getLastPayPeriodStart()
+
+        if (lastProcessed == currentPeriodStart) return false
+
+        // New pay period detected — delete all one-off costs
+        SheetTab.entries.forEach { tab ->
+            try { deleteOneOffTransactions(tab) } catch (_: Exception) {}
+        }
+        prefs.setLastPayPeriodStart(currentPeriodStart)
+        return true
+    }
+
+    /** Calculates the effective start date of the current pay period (with weekend → Friday adjustment). */
+    private fun resolveCurrentPayPeriodStart(payDay: Int): String {
+        val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
+        val cal = Calendar.getInstance()
+        val today = cal.get(Calendar.DAY_OF_MONTH)
+
+        if (today < payDay) {
+            cal.add(Calendar.MONTH, -1)
+        }
+        cal.set(Calendar.DAY_OF_MONTH, payDay)
+
+        when (cal.get(Calendar.DAY_OF_WEEK)) {
+            Calendar.SATURDAY -> cal.add(Calendar.DAY_OF_MONTH, -1)
+            Calendar.SUNDAY -> cal.add(Calendar.DAY_OF_MONTH, -2)
+        }
+
+        return fmt.format(cal.time)
     }
 
     // Replicates: =IF(OR(EQ(D,"Income"),EQ(D,"Transfer")), C, IF(C<0, ROUNDUP(C,0), C))

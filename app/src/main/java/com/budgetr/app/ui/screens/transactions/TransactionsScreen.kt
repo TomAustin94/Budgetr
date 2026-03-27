@@ -16,12 +16,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,7 +71,6 @@ fun TransactionsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showResetConfirm by remember { mutableStateOf(false) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.error) {
@@ -111,25 +108,6 @@ fun TransactionsScreen(
         )
     }
 
-    if (showResetConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            title = { Text("Reset to Fixed Transactions") },
-            text = { Text("This will permanently delete all One Off Cost transactions across all accounts. Fixed costs and income will remain.\n\nThis cannot be undone.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    showResetConfirm = false
-                    viewModel.resetToFixedTransactions()
-                }) {
-                    Text("Delete One Off Costs", color = ExpenseRed)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) { Text("Cancel") }
-            }
-        )
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -158,14 +136,6 @@ fun TransactionsScreen(
                                     }
                                 )
                             }
-                        }
-                    }
-                    // Reset button
-                    IconButton(onClick = { showResetConfirm = true }, enabled = !uiState.isResetting) {
-                        if (uiState.isResetting) {
-                            CircularProgressIndicator(modifier = androidx.compose.ui.Modifier.padding(8.dp), strokeWidth = 2.dp)
-                        } else {
-                            Icon(Icons.Default.RestartAlt, contentDescription = "Reset to fixed transactions", tint = ExpenseRed)
                         }
                     }
                 }

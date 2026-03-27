@@ -31,7 +31,6 @@ data class TransactionsUiState(
     val transactionToEdit: Transaction? = null,
     val showAddSheet: Boolean = false,
     val addSaveCount: Int = 0,
-    val isResetting: Boolean = false,
     val payDay: Int = 26
 )
 
@@ -161,22 +160,6 @@ class TransactionsViewModel @Inject constructor(
                 _uiState.update { it.copy(transactionToDelete = null) }
             } catch (e: Exception) {
                 _uiState.update { it.copy(transactionToDelete = null, error = e.message) }
-            }
-        }
-    }
-
-    /** Deletes all One Off Cost transactions across all tabs. */
-    fun resetToFixedTransactions() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isResetting = true, error = null) }
-            try {
-                SheetTab.entries.forEach { tab ->
-                    repository.deleteOneOffTransactions(tab)
-                }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message) }
-            } finally {
-                _uiState.update { it.copy(isResetting = false) }
             }
         }
     }

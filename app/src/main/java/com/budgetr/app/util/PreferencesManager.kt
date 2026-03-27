@@ -15,6 +15,7 @@ class PreferencesManager @Inject constructor(
         private const val KEY_USER_NAME = "user_name"
         private const val KEY_USER_PHOTO = "user_photo"
         private const val KEY_PAY_DAY = "pay_day"
+        private const val KEY_LAST_PAY_PERIOD_START = "last_pay_period_start"
     }
 
     fun getAccessToken(): String? = prefs.getString(KEY_ACCESS_TOKEN, null)
@@ -39,6 +40,9 @@ class PreferencesManager @Inject constructor(
     fun setPayDay(day: Int) = prefs.edit().putString(KEY_PAY_DAY, day.toString()).apply()
 
     fun hasSpreadsheet(): Boolean = !getSpreadsheetId().isNullOrBlank()
+
+    fun getLastPayPeriodStart(): String? = prefs.getString(KEY_LAST_PAY_PERIOD_START, null)
+    fun setLastPayPeriodStart(date: String) = prefs.edit().putString(KEY_LAST_PAY_PERIOD_START, date).apply()
 
     fun clearAll() = prefs.edit().clear().apply()
 }

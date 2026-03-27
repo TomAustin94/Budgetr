@@ -54,7 +54,19 @@ class AccountBalancesViewModel @Inject constructor(
                 _uiState.update { it.copy(balances = balances, rollovers = rollovers) }
             }
         }
+        checkPayPeriod()
         refresh()
+    }
+
+    private fun checkPayPeriod() {
+        viewModelScope.launch {
+            try {
+                val wasReset = repository.checkAndProcessNewPayPeriod()
+                if (wasReset) {
+                    _uiState.update { it.copy(successMessage = "New pay period started — one-off costs cleared") }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     fun refresh() {
