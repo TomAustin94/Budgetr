@@ -53,7 +53,7 @@ class BudgetrWidget : GlanceAppWidget() {
 
 @Composable
 private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>) {
-    val bgColor = Color(0xFF1B5E20)
+    val bgColor = Color(0xFF121212)
     val positiveColor = Color(0xFF69F0AE)
     val negativeColor = Color(0xFFFF5252)
     val subtleWhite = Color(0xAAFFFFFF)
