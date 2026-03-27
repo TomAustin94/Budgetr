@@ -6,8 +6,7 @@ object NavRoutes {
     const val MAIN = "main"
 
     // Bottom nav tabs (used inside MainScreen's nested NavHost)
-    const val HOME = "home"
+    const val ACCOUNTS = "accounts"
     const val TRANSACTIONS = "transactions"
-    const val ACCOUNT_BALANCES = "account_balances"
     const val SETTINGS = "settings"
 }

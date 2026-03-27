@@ -3,7 +3,6 @@ package com.budgetr.app.ui.navigation
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalance
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -22,7 +21,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.budgetr.app.ui.screens.balances.AccountBalancesScreen
-import com.budgetr.app.ui.screens.home.HomeScreen
 import com.budgetr.app.ui.screens.settings.SettingsScreen
 import com.budgetr.app.ui.screens.transactions.TransactionsScreen
 
@@ -33,9 +31,8 @@ private data class BottomNavItem(
 )
 
 private val bottomNavItems = listOf(
-    BottomNavItem(NavRoutes.HOME, "Home", Icons.Default.Home),
+    BottomNavItem(NavRoutes.ACCOUNTS, "Accounts", Icons.Default.AccountBalance),
     BottomNavItem(NavRoutes.TRANSACTIONS, "Transactions", Icons.Default.List),
-    BottomNavItem(NavRoutes.ACCOUNT_BALANCES, "Accounts", Icons.Default.AccountBalance),
     BottomNavItem(NavRoutes.SETTINGS, "Settings", Icons.Default.Settings)
 )
 
@@ -67,24 +64,13 @@ fun MainScreen(onSignOut: () -> Unit) {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = NavRoutes.HOME,
+            startDestination = NavRoutes.ACCOUNTS,
             modifier = Modifier.padding(innerPadding)
         ) {
-            composable(NavRoutes.HOME) {
-                HomeScreen(
-                    onNavigateToAddTransaction = {
-                        navController.navigate(NavRoutes.TRANSACTIONS) {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-            }
             composable(NavRoutes.TRANSACTIONS) {
                 TransactionsScreen()
             }
-            composable(NavRoutes.ACCOUNT_BALANCES) {
+            composable(NavRoutes.ACCOUNTS) {
                 AccountBalancesScreen()
             }
             composable(NavRoutes.SETTINGS) {
