@@ -4,7 +4,6 @@ import com.budgetr.app.data.api.AuthInterceptor
 import com.budgetr.app.data.api.GoogleDriveApi
 import com.budgetr.app.data.api.GoogleSheetsApi
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -26,7 +25,6 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideMoshi(): Moshi = Moshi.Builder()
-        .addLast(KotlinJsonAdapterFactory())
         .build()
 
     @Provides
