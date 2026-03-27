@@ -48,23 +48,30 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-/** Returns the pay-period start date: the 26th of the appropriate month.
- *  If today < 26: 26th of last month. If today >= 26: 26th of this month. */
-private fun getPayDate(): String {
+/**
+ * Returns the pay date for the given [payDay] day-of-month.
+ * - If today >= payDay: use payDay of this month.
+ * - If today < payDay: use payDay of last month.
+ * - If the resolved date falls on Saturday: move back 1 day to Friday.
+ * - If it falls on Sunday: move back 2 days to Friday.
+ */
+internal fun getPayDate(payDay: Int = 26): String {
     val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
     val cal = Calendar.getInstance()
-    return when {
-        cal.get(Calendar.DAY_OF_MONTH) == 26 -> fmt.format(cal.time)
-        cal.get(Calendar.DAY_OF_MONTH) < 26 -> {
-            cal.set(Calendar.DAY_OF_MONTH, 26)
-            cal.add(Calendar.MONTH, -1)
-            fmt.format(cal.time)
-        }
-        else -> {
-            cal.set(Calendar.DAY_OF_MONTH, 26)
-            fmt.format(cal.time)
-        }
+    val today = cal.get(Calendar.DAY_OF_MONTH)
+
+    if (today < payDay) {
+        cal.add(Calendar.MONTH, -1)
     }
+    cal.set(Calendar.DAY_OF_MONTH, payDay)
+
+    // Adjust if pay day lands on a weekend → move to preceding Friday
+    when (cal.get(Calendar.DAY_OF_WEEK)) {
+        Calendar.SATURDAY -> cal.add(Calendar.DAY_OF_MONTH, -1)
+        Calendar.SUNDAY -> cal.add(Calendar.DAY_OF_MONTH, -2)
+    }
+
+    return fmt.format(cal.time)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +80,7 @@ fun AddEditTransactionSheet(
     existingTransaction: Transaction?,
     currentTab: SheetTab,
     addSaveCount: Int,
+    payDay: Int = 26,
     onSave: (Transaction) -> Unit,
     onSaveTransfer: (source: Transaction, destination: Transaction) -> Unit,
     onDismiss: () -> Unit,
@@ -85,7 +93,7 @@ fun AddEditTransactionSheet(
     val initialCategory = existingTransaction?.category ?: presetCategory ?: TransactionCategory.ONE_OFF_COST
     var date by remember {
         mutableStateOf(
-            existingTransaction?.date ?: if (initialCategory == TransactionCategory.FIXED_COST) getPayDate() else today
+            existingTransaction?.date ?: if (initialCategory == TransactionCategory.FIXED_COST || initialCategory == TransactionCategory.SALARY) getPayDate(payDay) else today
         )
     }
     var info by remember { mutableStateOf(existingTransaction?.info ?: "") }
@@ -107,8 +115,9 @@ fun AddEditTransactionSheet(
     LaunchedEffect(category) {
         if (!isEdit) {
             when (category) {
-                TransactionCategory.FIXED_COST -> date = getPayDate()
-                TransactionCategory.TRANSFER -> date = if (applyPayDate) getPayDate() else today
+                TransactionCategory.FIXED_COST,
+                TransactionCategory.SALARY -> date = getPayDate(payDay)
+                TransactionCategory.TRANSFER -> date = if (applyPayDate) getPayDate(payDay) else today
                 else -> {
                     date = today
                     applyPayDate = false
@@ -119,7 +128,7 @@ fun AddEditTransactionSheet(
 
     LaunchedEffect(applyPayDate) {
         if (!isEdit && category == TransactionCategory.TRANSFER) {
-            date = if (applyPayDate) getPayDate() else today
+            date = if (applyPayDate) getPayDate(payDay) else today
         }
     }
 
@@ -131,7 +140,7 @@ fun AddEditTransactionSheet(
             transferToTab = null
             applyPayDate = false
             savedBanner = true
-            date = if (category == TransactionCategory.FIXED_COST) getPayDate() else today
+            date = if (category == TransactionCategory.FIXED_COST || category == TransactionCategory.SALARY) getPayDate(payDay) else today
         }
     }
 
@@ -346,7 +355,7 @@ fun AddEditTransactionSheet(
                             style = MaterialTheme.typography.bodyMedium
                         )
                         Text(
-                            text = "Sets date to ${getPayDate()}",
+                            text = "Sets date to ${getPayDate(payDay)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
@@ -376,7 +385,7 @@ fun AddEditTransactionSheet(
 
                 Button(
                     onClick = {
-                        val signedAmount = if (category == TransactionCategory.INCOME) parsedAmount else -parsedAmount
+                        val signedAmount = if (category == TransactionCategory.INCOME || category == TransactionCategory.SALARY) parsedAmount else -parsedAmount
 
                         if (isTransfer && !isEdit && transferToTab != null) {
                             val source = Transaction(

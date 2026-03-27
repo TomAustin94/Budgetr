@@ -88,6 +88,7 @@ fun TransactionsScreen(
             existingTransaction = uiState.transactionToEdit,
             currentTab = uiState.selectedTab,
             addSaveCount = uiState.addSaveCount,
+            payDay = uiState.payDay,
             onSave = viewModel::saveTransaction,
             onSaveTransfer = viewModel::saveTransfer,
             onDismiss = viewModel::dismissSheet

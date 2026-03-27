@@ -22,14 +22,15 @@ import kotlinx.coroutines.delay
 fun SplashScreen(
     onNavigateToLogin: () -> Unit,
     onNavigateToHome: () -> Unit,
+    onNavigateToOnboarding: () -> Unit,
     viewModel: SplashViewModel = hiltViewModel()
 ) {
     LaunchedEffect(Unit) {
         delay(800)
-        if (viewModel.isSignedIn()) {
-            onNavigateToHome()
-        } else {
-            onNavigateToLogin()
+        when {
+            !viewModel.isSignedIn() -> onNavigateToLogin()
+            !viewModel.hasSpreadsheet() -> onNavigateToOnboarding()
+            else -> onNavigateToHome()
         }
     }
 
@@ -42,7 +43,7 @@ fun SplashScreen(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "💰",
-                fontSize = 64.sp
+                fontSize = 96.sp
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
