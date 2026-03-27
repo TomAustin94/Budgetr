@@ -3,6 +3,7 @@ package com.budgetr.app.data.model
 enum class TransactionCategory(val displayName: String) {
     INCOME("Income"),
     SALARY("Salary"),
+    RECURRING_INCOME("Recurring Income"),
     FIXED_COST("Fixed Cost"),
     ONE_OFF_COST("One Off Cost"),
     TRANSFER("Transfer"),

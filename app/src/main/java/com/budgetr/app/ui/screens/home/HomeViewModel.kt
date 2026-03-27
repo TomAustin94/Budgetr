@@ -62,7 +62,7 @@ class HomeViewModel @Inject constructor(
             ) { balances, monzoTx, halifaxDebitTx, halifaxCreditTx ->
                 val allTx = monzoTx + halifaxDebitTx + halifaxCreditTx
                 val income = allTx
-                    .filter { it.category == TransactionCategory.INCOME || it.category == TransactionCategory.SALARY }
+                    .filter { it.category == TransactionCategory.INCOME || it.category == TransactionCategory.SALARY || it.category == TransactionCategory.RECURRING_INCOME }
                     .sumOf { it.amount }
                 val fixedCosts = allTx
                     .filter { it.category == TransactionCategory.FIXED_COST }
@@ -71,7 +71,7 @@ class HomeViewModel @Inject constructor(
                     .filter { it.category == TransactionCategory.ONE_OFF_COST }
                     .sumOf { kotlin.math.abs(it.amount) }
                 val outgoings = allTx
-                    .filter { it.category != TransactionCategory.INCOME && it.category != TransactionCategory.SALARY && it.category != TransactionCategory.TRANSFER }
+                    .filter { it.category != TransactionCategory.INCOME && it.category != TransactionCategory.SALARY && it.category != TransactionCategory.RECURRING_INCOME && it.category != TransactionCategory.TRANSFER }
                     .sumOf { kotlin.math.abs(it.amount) }
                 val totalAvailable = balances.sumOf { it.remainingBalance }
                 SummaryData(balances, totalAvailable, income, outgoings, fixedCosts, oneOffCosts)

@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetr.app.data.model.AccountBalance
 import com.budgetr.app.data.model.BalanceRollover
+import com.budgetr.app.data.model.SheetTab
+import com.budgetr.app.data.model.TransactionCategory
 import com.budgetr.app.data.repository.SheetsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,10 +19,21 @@ import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
 
+private data class BalanceSummaryData(
+    val balances: List<AccountBalance>,
+    val rollovers: List<BalanceRollover>,
+    val totalAvailable: Double,
+    val totalIncome: Double,
+    val totalOutgoings: Double
+)
+
 data class AccountBalancesUiState(
     val isRefreshing: Boolean = false,
     val balances: List<AccountBalance> = emptyList(),
     val rollovers: List<BalanceRollover> = emptyList(),
+    val totalAvailable: Double = 0.0,
+    val totalIncome: Double = 0.0,
+    val totalOutgoings: Double = 0.0,
     val error: String? = null,
     val successMessage: String? = null,
     // Rename dialog
@@ -31,6 +44,9 @@ data class AccountBalancesUiState(
     val showAddAccount: Boolean = false,
     val newAccountName: String = "",
     val isAddingAccount: Boolean = false,
+    // Delete account dialog
+    val deleteAccount: AccountBalance? = null,
+    val isDeletingAccount: Boolean = false,
     // Rollover edit dialog
     val rolloverEditAccount: String? = null,
     val rolloverEditText: String = "",
@@ -47,11 +63,52 @@ class AccountBalancesViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            combine(
+            val balancesAndRollovers = combine(
                 repository.getAccountBalances(),
                 repository.getBalanceRollovers()
-            ) { balances, rollovers -> Pair(balances, rollovers) }.collect { (balances, rollovers) ->
-                _uiState.update { it.copy(balances = balances, rollovers = rollovers) }
+            ) { balances, rollovers -> Pair(balances, rollovers) }
+
+            val allTransactions = combine(
+                repository.getTransactions(SheetTab.MONZO),
+                repository.getTransactions(SheetTab.HALIFAX_DEBIT),
+                repository.getTransactions(SheetTab.HALIFAX_CREDIT)
+            ) { monzoTx, halifaxDebitTx, halifaxCreditTx ->
+                monzoTx + halifaxDebitTx + halifaxCreditTx
+            }
+
+            combine(balancesAndRollovers, allTransactions) { (balances, rollovers), allTx ->
+                val income = allTx
+                    .filter {
+                        it.category == TransactionCategory.INCOME ||
+                        it.category == TransactionCategory.SALARY ||
+                        it.category == TransactionCategory.RECURRING_INCOME
+                    }
+                    .sumOf { it.amount }
+                val outgoings = allTx
+                    .filter {
+                        it.category != TransactionCategory.INCOME &&
+                        it.category != TransactionCategory.SALARY &&
+                        it.category != TransactionCategory.RECURRING_INCOME &&
+                        it.category != TransactionCategory.TRANSFER
+                    }
+                    .sumOf { kotlin.math.abs(it.amount) }
+                BalanceSummaryData(
+                    balances = balances,
+                    rollovers = rollovers,
+                    totalAvailable = balances.sumOf { it.remainingBalance },
+                    totalIncome = income,
+                    totalOutgoings = outgoings
+                )
+            }.collect { data ->
+                _uiState.update {
+                    it.copy(
+                        balances = data.balances,
+                        rollovers = data.rollovers,
+                        totalAvailable = data.totalAvailable,
+                        totalIncome = data.totalIncome,
+                        totalOutgoings = data.totalOutgoings
+                    )
+                }
             }
         }
         checkPayPeriod()
@@ -128,6 +185,25 @@ class AccountBalancesViewModel @Inject constructor(
                 _uiState.update { it.copy(showAddAccount = false, newAccountName = "", isAddingAccount = false, successMessage = "\"$name\" account created") }
             } catch (e: Exception) {
                 _uiState.update { it.copy(isAddingAccount = false, error = e.message) }
+            }
+        }
+    }
+
+    // --- Delete Account ---
+
+    fun showDeleteAccountDialog(balance: AccountBalance) = _uiState.update { it.copy(deleteAccount = balance) }
+
+    fun dismissDeleteAccountDialog() = _uiState.update { it.copy(deleteAccount = null) }
+
+    fun confirmDeleteAccount() {
+        val account = _uiState.value.deleteAccount ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeletingAccount = true) }
+            try {
+                repository.deleteAccount(account.account)
+                _uiState.update { it.copy(deleteAccount = null, isDeletingAccount = false, successMessage = "\"${account.account}\" deleted") }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isDeletingAccount = false, error = e.message) }
             }
         }
     }

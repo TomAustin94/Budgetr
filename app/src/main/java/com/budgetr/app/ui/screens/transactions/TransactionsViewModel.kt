@@ -1,5 +1,6 @@
 package com.budgetr.app.ui.screens.transactions
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.budgetr.app.data.model.SheetTab
@@ -38,13 +39,18 @@ data class TransactionsUiState(
 @HiltViewModel
 class TransactionsViewModel @Inject constructor(
     private val repository: SheetsRepository,
-    private val prefs: PreferencesManager
+    private val prefs: PreferencesManager,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(TransactionsUiState(payDay = prefs.getPayDay()))
+    private val initialTab = savedStateHandle.get<String>("tabName")
+        ?.let { name -> SheetTab.entries.find { it.name == name } }
+        ?: SheetTab.MONZO
+
+    private val _uiState = MutableStateFlow(TransactionsUiState(selectedTab = initialTab, payDay = prefs.getPayDay()))
     val uiState: StateFlow<TransactionsUiState> = _uiState.asStateFlow()
 
-    private val selectedTabFlow = MutableStateFlow(SheetTab.MONZO)
+    private val selectedTabFlow = MutableStateFlow(initialTab)
     private val categoryFilterFlow = MutableStateFlow<TransactionCategory?>(null)
     private val searchQueryFlow = MutableStateFlow("")
     private val sortOrderFlow = MutableStateFlow(SortOrder.DATE_DESC)
@@ -71,6 +77,7 @@ class TransactionsViewModel @Inject constructor(
                         SortOrder.DATE_ASC -> result.sortedBy { it.date }
                         SortOrder.AMOUNT_DESC -> result.sortedByDescending { kotlin.math.abs(it.amount) }
                         SortOrder.AMOUNT_ASC -> result.sortedBy { kotlin.math.abs(it.amount) }
+                        SortOrder.CATEGORY_ASC -> result.sortedBy { it.category.displayName }
                     }
                 }
             }.collect { filtered ->
@@ -125,11 +132,9 @@ class TransactionsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 if (transaction.rowIndex > 0) {
-                    // Edit — close the sheet
                     repository.updateTransaction(transaction)
                     _uiState.update { it.copy(showAddSheet = false, transactionToEdit = null) }
                 } else {
-                    // Add — keep sheet open for next entry, reset form via addSaveCount
                     repository.addTransaction(transaction)
                     _uiState.update { it.copy(addSaveCount = it.addSaveCount + 1) }
                 }
@@ -139,7 +144,6 @@ class TransactionsViewModel @Inject constructor(
         }
     }
 
-    /** Creates two transactions for a transfer between accounts. */
     fun saveTransfer(source: Transaction, destination: Transaction) {
         viewModelScope.launch {
             try {
