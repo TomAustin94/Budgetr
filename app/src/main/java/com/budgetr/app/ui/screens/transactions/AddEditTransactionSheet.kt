@@ -23,6 +23,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -94,6 +95,7 @@ fun AddEditTransactionSheet(
     var category by remember { mutableStateOf(initialCategory) }
     var selectedTab by remember { mutableStateOf(existingTransaction?.sheetTab ?: currentTab) }
     var transferToTab by remember { mutableStateOf<SheetTab?>(null) }
+    var applyPayDate by remember { mutableStateOf(false) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
@@ -101,12 +103,23 @@ fun AddEditTransactionSheet(
     var transferToExpanded by remember { mutableStateOf(false) }
     var savedBanner by remember { mutableStateOf(false) }
 
-    // Auto-set date to pay date when Fixed Cost is selected (add mode only)
+    // Auto-set date based on category and applyPayDate toggle
     LaunchedEffect(category) {
-        if (!isEdit && category == TransactionCategory.FIXED_COST) {
-            date = getPayDate()
-        } else if (!isEdit && category != TransactionCategory.FIXED_COST) {
-            date = today
+        if (!isEdit) {
+            when (category) {
+                TransactionCategory.FIXED_COST -> date = getPayDate()
+                TransactionCategory.TRANSFER -> date = if (applyPayDate) getPayDate() else today
+                else -> {
+                    date = today
+                    applyPayDate = false
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(applyPayDate) {
+        if (!isEdit && category == TransactionCategory.TRANSFER) {
+            date = if (applyPayDate) getPayDate() else today
         }
     }
 
@@ -116,8 +129,8 @@ fun AddEditTransactionSheet(
             info = ""
             amount = ""
             transferToTab = null
+            applyPayDate = false
             savedBanner = true
-            // Date stays aligned with category (fixed cost = pay date, else today)
             date = if (category == TransactionCategory.FIXED_COST) getPayDate() else today
         }
     }
@@ -245,7 +258,10 @@ fun AddEditTransactionSheet(
                                 onClick = {
                                     category = cat
                                     categoryExpanded = false
-                                    if (cat != TransactionCategory.TRANSFER) transferToTab = null
+                                    if (cat != TransactionCategory.TRANSFER) {
+                                        transferToTab = null
+                                        applyPayDate = false
+                                    }
                                 }
                             )
                         }
@@ -277,7 +293,6 @@ fun AddEditTransactionSheet(
                             onClick = {
                                 selectedTab = tab
                                 tabExpanded = false
-                                // Clear transfer destination if it matches new source
                                 if (transferToTab == tab) transferToTab = null
                             }
                         )
@@ -318,6 +333,31 @@ fun AddEditTransactionSheet(
                 }
             }
 
+            // Optional pay-date toggle for transfers
+            AnimatedVisibility(visible = category == TransactionCategory.TRANSFER) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Apply pay date",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "Sets date to ${getPayDate()}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    Switch(
+                        checked = applyPayDate,
+                        onCheckedChange = { applyPayDate = it }
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
 
             val parsedAmount = amount.toDoubleOrNull() ?: 0.0
@@ -339,7 +379,6 @@ fun AddEditTransactionSheet(
                         val signedAmount = if (category == TransactionCategory.INCOME) parsedAmount else -parsedAmount
 
                         if (isTransfer && !isEdit && transferToTab != null) {
-                            // Two-sided transfer entry
                             val source = Transaction(
                                 rowIndex = 0,
                                 date = date,
