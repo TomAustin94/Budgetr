@@ -53,7 +53,7 @@ class AuthManager @Inject constructor(
     fun refreshToken(): String? {
         val account = GoogleSignIn.getLastSignedInAccount(context) ?: return null
         return try {
-            GoogleAuthUtil.clearToken(context, prefs.getAccessToken())
+            GoogleAuthUtil.clearToken(context, prefs.getAccessToken() ?: return null)
             val newToken = GoogleAuthUtil.getToken(context, account.account!!, TOKEN_SCOPE)
             prefs.setAccessToken(newToken)
             newToken

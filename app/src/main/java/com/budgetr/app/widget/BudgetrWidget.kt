@@ -53,7 +53,7 @@ class BudgetrWidget : GlanceAppWidget() {
 
 @Composable
 private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>) {
-    val bgColor = Color(0xFF1B5E20)
+    val bgColor = Color(0xFF121212)
     val positiveColor = Color(0xFF69F0AE)
     val negativeColor = Color(0xFFFF5252)
     val subtleWhite = Color(0xAAFFFFFF)
@@ -141,12 +141,12 @@ private fun WidgetContent(context: Context, balances: List<AccountBalanceEntity>
 
         // Quick-add buttons
         Row(modifier = GlanceModifier.fillMaxWidth()) {
-            QuickAddButton(context, "One Off", TransactionCategory.ONE_OFF_COST, Color(0xFFFF5252))
+            QuickAddButton(context, "One Off", TransactionCategory.ONE_OFF_COST, Color(0xFFFF5252), modifier = GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(5.dp))
-            QuickAddButton(context, "Fixed", TransactionCategory.FIXED_COST, Color(0xFFFFAB40))
+            QuickAddButton(context, "Fixed", TransactionCategory.FIXED_COST, Color(0xFFFFAB40), modifier = GlanceModifier.defaultWeight())
             Spacer(GlanceModifier.width(5.dp))
             // Transfer opens the full-app form (needs destination account picker)
-            QuickAddButton(context, "Transfer", TransactionCategory.TRANSFER, Color(0xFF90CAF9), fullApp = true)
+            QuickAddButton(context, "Transfer", TransactionCategory.TRANSFER, Color(0xFF90CAF9), fullApp = true, modifier = GlanceModifier.defaultWeight())
         }
     }
 }
@@ -157,7 +157,8 @@ private fun QuickAddButton(
     label: String,
     category: TransactionCategory,
     color: Color,
-    fullApp: Boolean = false
+    fullApp: Boolean = false,
+    modifier: GlanceModifier = GlanceModifier
 ) {
     val intent = Intent(context, QuickAddActivity::class.java).apply {
         putExtra(QuickAddActivity.EXTRA_CATEGORY, category.name)
@@ -165,9 +166,8 @@ private fun QuickAddButton(
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
     Box(
-        modifier = GlanceModifier
+        modifier = modifier
             .height(28.dp)
-            .defaultWeight()
             .background(Color(0x33FFFFFF))
             .clickable(actionStartActivity(intent)),
         contentAlignment = Alignment.Center
