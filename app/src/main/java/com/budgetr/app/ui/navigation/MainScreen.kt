@@ -49,11 +49,19 @@ fun MainScreen(onSignOut: () -> Unit) {
         bottomBar = {
             NavigationBar {
                 bottomNavItems.forEach { item ->
+                    // Treat "transactions_tab/{tabName}" as part of the Transactions tab
+                    val isSelected = if (item.route == NavRoutes.TRANSACTIONS) {
+                        currentDestination?.hierarchy?.any {
+                            it.route == NavRoutes.TRANSACTIONS || it.route == "transactions_tab/{tabName}"
+                        } == true
+                    } else {
+                        currentDestination?.hierarchy?.any { it.route == item.route } == true
+                    }
                     NavigationBarItem(
-                        selected = currentDestination?.hierarchy?.any { it.route == item.route } == true,
+                        selected = isSelected,
                         onClick = {
                             navController.navigate(item.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                popUpTo(NavRoutes.ACCOUNT_BALANCES) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
@@ -83,7 +91,10 @@ fun MainScreen(onSignOut: () -> Unit) {
             composable(NavRoutes.ACCOUNT_BALANCES) {
                 AccountBalancesScreen(
                     onNavigateToTransactions = { sheetTab ->
-                        navController.navigate("transactions_tab/${sheetTab.name}")
+                        navController.navigate("transactions_tab/${sheetTab.name}") {
+                            popUpTo(NavRoutes.ACCOUNT_BALANCES) { saveState = false }
+                            launchSingleTop = true
+                        }
                     }
                 )
             }

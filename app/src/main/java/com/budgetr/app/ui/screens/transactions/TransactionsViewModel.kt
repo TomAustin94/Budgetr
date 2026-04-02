@@ -18,6 +18,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import javax.inject.Inject
 
 data class TransactionsUiState(
@@ -64,7 +67,15 @@ class TransactionsViewModel @Inject constructor(
                     searchQueryFlow,
                     sortOrderFlow
                 ) { transactions, filter, query, sort ->
+                    val currentMonth = Calendar.getInstance().get(Calendar.MONTH) + 1
+                    val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
                     var result = transactions
+                        // Hide fixed costs restricted to other months
+                        .filter { tx ->
+                            tx.category != TransactionCategory.FIXED_COST ||
+                            tx.activeMonths == null ||
+                            tx.activeMonths.contains(currentMonth)
+                        }
                     if (filter != null) result = result.filter { it.category == filter }
                     if (query.isNotBlank()) {
                         result = result.filter {
@@ -73,8 +84,8 @@ class TransactionsViewModel @Inject constructor(
                         }
                     }
                     when (sort) {
-                        SortOrder.DATE_DESC -> result.sortedByDescending { it.date }
-                        SortOrder.DATE_ASC -> result.sortedBy { it.date }
+                        SortOrder.DATE_DESC -> result.sortedByDescending { dateFmt.parseToEpoch(it.date) }
+                        SortOrder.DATE_ASC -> result.sortedBy { dateFmt.parseToEpoch(it.date) }
                         SortOrder.AMOUNT_DESC -> result.sortedByDescending { kotlin.math.abs(it.amount) }
                         SortOrder.AMOUNT_ASC -> result.sortedBy { kotlin.math.abs(it.amount) }
                         SortOrder.CATEGORY_ASC -> result.sortedBy { it.category.displayName }
@@ -132,7 +143,14 @@ class TransactionsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 if (transaction.rowIndex > 0) {
-                    repository.updateTransaction(transaction)
+                    val original = _uiState.value.transactionToEdit
+                    if (original != null && original.sheetTab != transaction.sheetTab) {
+                        // Account changed: remove from old account, append to new account
+                        repository.deleteTransaction(original)
+                        repository.addTransaction(transaction.copy(rowIndex = 0))
+                    } else {
+                        repository.updateTransaction(transaction)
+                    }
                     _uiState.update { it.copy(showAddSheet = false, transactionToEdit = null) }
                 } else {
                     repository.addTransaction(transaction)
@@ -170,3 +188,6 @@ class TransactionsViewModel @Inject constructor(
 
     fun clearError() = _uiState.update { it.copy(error = null) }
 }
+
+private fun SimpleDateFormat.parseToEpoch(date: String): Long =
+    runCatching { parse(date)?.time }.getOrNull() ?: 0L

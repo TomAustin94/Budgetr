@@ -5,15 +5,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.budgetr.app.R
 import com.budgetr.app.data.model.SheetTab
 import com.budgetr.app.data.model.TransactionCategory
+import com.budgetr.app.data.repository.SheetsRepository
 import com.budgetr.app.ui.screens.transactions.AddEditTransactionSheet
 import com.budgetr.app.ui.screens.transactions.TransactionsViewModel
 import com.budgetr.app.ui.theme.BudgetrTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
  * Lightweight activity launched from the home screen widget.
@@ -32,6 +35,8 @@ class QuickAddActivity : ComponentActivity() {
         const val EXTRA_CATEGORY = "quick_add_category"
         const val EXTRA_FULL_APP = "quick_add_full_app"
     }
+
+    @Inject lateinit var repository: SheetsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must call setTheme before super.onCreate so the window background is applied correctly
@@ -53,9 +58,17 @@ class QuickAddActivity : ComponentActivity() {
                     viewModel.showAddSheet()
                 }
 
-                // Close after a successful save
+                // After a successful save, refresh balances then update widget and close
                 LaunchedEffect(uiState.addSaveCount) {
-                    if (uiState.addSaveCount > 0) finish()
+                    if (uiState.addSaveCount > 0) {
+                        try {
+                            repository.refreshAccountBalances()
+                            val manager = GlanceAppWidgetManager(applicationContext)
+                            val ids = manager.getGlanceIds(BudgetrWidget::class.java)
+                            ids.forEach { BudgetrWidget().update(applicationContext, it) }
+                        } catch (_: Exception) {}
+                        finish()
+                    }
                 }
 
                 if (uiState.showAddSheet) {

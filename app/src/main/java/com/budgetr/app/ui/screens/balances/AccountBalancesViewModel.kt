@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import javax.inject.Inject
@@ -77,19 +78,34 @@ class AccountBalancesViewModel @Inject constructor(
             }
 
             combine(balancesAndRollovers, allTransactions) { (balances, rollovers), allTx ->
+                val today = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                }.time
+                val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
                 val income = allTx
                     .filter {
-                        it.category == TransactionCategory.INCOME ||
-                        it.category == TransactionCategory.SALARY ||
-                        it.category == TransactionCategory.RECURRING_INCOME
+                        when (it.category) {
+                            TransactionCategory.INCOME,
+                            TransactionCategory.SALARY -> true
+                            TransactionCategory.RECURRING_INCOME -> {
+                                // Only count recurring income on or after its scheduled date
+                                val txDate = runCatching { dateFmt.parse(it.date) }.getOrNull()
+                                txDate != null && !txDate.after(today)
+                            }
+                            else -> false
+                        }
                     }
                     .sumOf { it.amount }
+                val currentMonth = Calendar.getInstance().get(Calendar.MONTH) + 1 // 1–12
                 val outgoings = allTx
                     .filter {
                         it.category != TransactionCategory.INCOME &&
                         it.category != TransactionCategory.SALARY &&
                         it.category != TransactionCategory.RECURRING_INCOME &&
-                        it.category != TransactionCategory.TRANSFER
+                        it.category != TransactionCategory.TRANSFER &&
+                        // Exclude fixed costs restricted to other months
+                        (it.activeMonths == null || it.activeMonths.contains(currentMonth))
                     }
                     .sumOf { kotlin.math.abs(it.amount) }
                 BalanceSummaryData(

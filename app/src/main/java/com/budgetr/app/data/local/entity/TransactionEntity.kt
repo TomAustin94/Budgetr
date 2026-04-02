@@ -11,5 +11,7 @@ data class TransactionEntity(
     val info: String,
     val amount: Double,
     val category: String,
-    val sheetTab: String
+    val sheetTab: String,
+    /** Comma-separated month numbers (e.g. "1,6,12"). Null means active every month. */
+    val activeMonths: String? = null
 )
