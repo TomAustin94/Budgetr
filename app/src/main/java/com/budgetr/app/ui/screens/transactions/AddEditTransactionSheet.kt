@@ -3,6 +3,8 @@ package com.budgetr.app.ui.screens.transactions
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +20,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -104,6 +107,9 @@ fun AddEditTransactionSheet(
     var selectedTab by remember { mutableStateOf(existingTransaction?.sheetTab ?: currentTab) }
     var transferToTab by remember { mutableStateOf<SheetTab?>(null) }
     var applyPayDate by remember { mutableStateOf(false) }
+    var activeMonths by remember {
+        mutableStateOf<Set<Int>>(existingTransaction?.activeMonths?.toSet() ?: emptySet())
+    }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var categoryExpanded by remember { mutableStateOf(false) }
@@ -375,6 +381,20 @@ fun AddEditTransactionSheet(
                 }
             }
 
+            // Month restriction — only shown for Fixed Cost
+            AnimatedVisibility(visible = category == TransactionCategory.FIXED_COST) {
+                ActiveMonthsPicker(
+                    activeMonths = activeMonths,
+                    onToggleMonth = { month ->
+                        activeMonths = if (activeMonths.contains(month)) {
+                            activeMonths - month
+                        } else {
+                            activeMonths + month
+                        }
+                    }
+                )
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
 
             val parsedAmount = amount.toDoubleOrNull() ?: 0.0
@@ -419,6 +439,9 @@ fun AddEditTransactionSheet(
                             )
                             onSaveTransfer(source, destination)
                         } else {
+                            val resolvedActiveMonths = if (category == TransactionCategory.FIXED_COST && activeMonths.isNotEmpty()) {
+                                activeMonths.sorted()
+                            } else null
                             onSave(
                                 Transaction(
                                     rowIndex = existingTransaction?.rowIndex ?: 0,
@@ -426,7 +449,8 @@ fun AddEditTransactionSheet(
                                     info = info,
                                     amount = signedAmount,
                                     category = category,
-                                    sheetTab = selectedTab
+                                    sheetTab = selectedTab,
+                                    activeMonths = resolvedActiveMonths
                                 )
                             )
                         }
@@ -434,6 +458,50 @@ fun AddEditTransactionSheet(
                     modifier = Modifier.weight(1f),
                     enabled = saveEnabled
                 ) { Text("Save") }
+            }
+        }
+    }
+}
+
+private val MONTH_NAMES = listOf("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun ActiveMonthsPicker(
+    activeMonths: Set<Int>,
+    onToggleMonth: (Int) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Active months", style = MaterialTheme.typography.bodyMedium)
+            if (activeMonths.isEmpty()) {
+                Text(
+                    "All months",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+        }
+        Text(
+            text = "Leave all unselected to show every month.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            MONTH_NAMES.forEachIndexed { index, name ->
+                val month = index + 1
+                FilterChip(
+                    selected = activeMonths.contains(month),
+                    onClick = { onToggleMonth(month) },
+                    label = { Text(name, style = MaterialTheme.typography.labelSmall) }
+                )
             }
         }
     }

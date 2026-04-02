@@ -88,7 +88,7 @@ class SheetsRepositoryImpl @Inject constructor(
 
     override suspend fun refreshTransactions(sheetTab: SheetTab) {
         val spreadsheetId = prefs.getSpreadsheetId() ?: return
-        val range = "${sheetTab.sheetName}!A:E"
+        val range = "${sheetTab.sheetName}!A:F"
         val response = api.getValues(spreadsheetId, range)
         val rows = response.values ?: return
 
@@ -101,7 +101,8 @@ class SheetsRepositoryImpl @Inject constructor(
                 info = row.getOrElse(1) { "" },
                 amount = row.getOrElse(2) { "0" }.replace("[£,]".toRegex(), "").toDoubleOrNull() ?: 0.0,
                 category = TransactionCategory.fromString(row.getOrElse(3) { "" }).name,
-                sheetTab = sheetTab.name
+                sheetTab = sheetTab.name,
+                activeMonths = row.getOrElse(5) { "" }.ifBlank { null }
             )
         }
 
@@ -133,14 +134,16 @@ class SheetsRepositoryImpl @Inject constructor(
 
     override suspend fun addTransaction(transaction: Transaction) {
         val spreadsheetId = prefs.getSpreadsheetId() ?: return
-        val range = "${transaction.sheetTab.sheetName}!A:E"
+        val range = "${transaction.sheetTab.sheetName}!A:F"
         val rounded = roundedAmount(transaction.amount, transaction.category)
+        val activeMonthsStr = transaction.activeMonths?.joinToString(",") ?: ""
         val row = listOf(listOf(
             transaction.date,
             transaction.info,
             transaction.amount.toString(),
             transaction.category.displayName,
-            rounded.toString()
+            rounded.toString(),
+            activeMonthsStr
         ))
         api.appendValues(spreadsheetId, range, body = ValueRange(values = row))
         refreshTransactions(transaction.sheetTab)
@@ -148,14 +151,16 @@ class SheetsRepositoryImpl @Inject constructor(
 
     override suspend fun updateTransaction(transaction: Transaction) {
         val spreadsheetId = prefs.getSpreadsheetId() ?: return
-        val range = "${transaction.sheetTab.sheetName}!A${transaction.rowIndex}:E${transaction.rowIndex}"
+        val range = "${transaction.sheetTab.sheetName}!A${transaction.rowIndex}:F${transaction.rowIndex}"
         val rounded = roundedAmount(transaction.amount, transaction.category)
+        val activeMonthsStr = transaction.activeMonths?.joinToString(",") ?: ""
         val row = listOf(listOf(
             transaction.date,
             transaction.info,
             transaction.amount.toString(),
             transaction.category.displayName,
-            rounded.toString()
+            rounded.toString(),
+            activeMonthsStr
         ))
         api.updateValues(spreadsheetId, range, body = ValueRange(values = row))
         refreshTransactions(transaction.sheetTab)
@@ -238,9 +243,9 @@ class SheetsRepositoryImpl @Inject constructor(
         api.appendValues(spreadsheetId, "Cover Sheet!A:F", body = ValueRange(values = accountRows))
 
         // Add headers to each transaction sheet
-        val txHeaders = listOf(listOf("Date", "Info", "Amount", "Category", "RoundedAmount"))
+        val txHeaders = listOf(listOf("Date", "Info", "Amount", "Category", "RoundedAmount", "ActiveMonths"))
         listOf("Monzo", "Halifax Debit Card", "Halifax Credit Card").forEach { sheet ->
-            api.updateValues(spreadsheetId, "$sheet!A1:E1", body = ValueRange(values = txHeaders))
+            api.updateValues(spreadsheetId, "$sheet!A1:F1", body = ValueRange(values = txHeaders))
         }
 
         return spreadsheetId
@@ -377,6 +382,13 @@ class SheetsRepositoryImpl @Inject constructor(
 
         if (lastProcessed == currentPeriodStart) return false
 
+        // On first install there is no recorded pay period. Just record the current one
+        // without deleting any data — the user hasn't completed a full pay cycle yet.
+        if (lastProcessed == null) {
+            prefs.setLastPayPeriodStart(currentPeriodStart)
+            return false
+        }
+
         // Snapshot current balances as rollover BEFORE clearing one-off costs,
         // so the carried-over amount reflects the true end-of-period balance.
         val balances = accountBalanceDao.getAllSync()
@@ -482,7 +494,8 @@ class SheetsRepositoryImpl @Inject constructor(
         info = info,
         amount = amount,
         category = TransactionCategory.fromString(category),
-        sheetTab = SheetTab.valueOf(sheetTab)
+        sheetTab = SheetTab.valueOf(sheetTab),
+        activeMonths = activeMonths?.split(",")?.mapNotNull { it.trim().toIntOrNull() }?.ifEmpty { null }
     )
 
     private fun AccountBalanceEntity.toAccountBalance() = AccountBalance(
