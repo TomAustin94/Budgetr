@@ -72,7 +72,7 @@ fun SettingsScreen(
                     Text("Select the day of the month you receive your salary. If it falls on a weekend, the previous Friday is used.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                     Spacer(modifier = Modifier.height(8.dp))
                     LazyColumn(modifier = Modifier.height(280.dp)) {
-                        items((1..28).toList()) { day ->
+                        items((1..31).toList()) { day ->
                             ListItem(
                                 headlineContent = {
                                     Text(

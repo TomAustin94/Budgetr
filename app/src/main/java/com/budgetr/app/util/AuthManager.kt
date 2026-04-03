@@ -7,6 +7,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -56,6 +57,7 @@ class AuthManager @Inject constructor(
             prefs.setAccessToken(newToken)
             newToken
         } catch (e: Exception) {
+            Log.e("AuthManager", "Token refresh failed", e)
             null
         }
     }

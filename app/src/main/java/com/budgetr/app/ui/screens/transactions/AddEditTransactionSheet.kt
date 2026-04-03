@@ -245,13 +245,18 @@ fun AddEditTransactionSheet(
             )
 
             // Amount
+            val amountError = amount.isNotBlank() && (amount.toDoubleOrNull() == null || amount.toDoubleOrNull()!! <= 0.0)
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it },
                 label = { Text("Amount (£)") },
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true
+                singleLine = true,
+                isError = amountError,
+                supportingText = if (amountError) {
+                    { Text("Enter a positive amount", color = MaterialTheme.colorScheme.error) }
+                } else null
             )
 
             // Category dropdown
@@ -399,7 +404,8 @@ fun AddEditTransactionSheet(
 
             val parsedAmount = amount.toDoubleOrNull() ?: 0.0
             val isTransfer = category == TransactionCategory.TRANSFER
-            val saveEnabled = info.isNotBlank() && amount.isNotBlank() &&
+            val amountValid = parsedAmount > 0.0
+            val saveEnabled = info.isNotBlank() && amountValid &&
                     (!isTransfer || isEdit || transferToTab != null)
 
             Row(
