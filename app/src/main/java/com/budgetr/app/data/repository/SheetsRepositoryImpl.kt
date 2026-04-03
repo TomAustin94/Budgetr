@@ -417,7 +417,7 @@ class SheetsRepositoryImpl @Inject constructor(
                             TransactionCategory.TRANSFER.name -> currentPeriodStart
                             TransactionCategory.RECURRING_INCOME.name -> {
                                 val day = entity.date.split("/").firstOrNull()?.toIntOrNull() ?: 1
-                                resolveRecurringDate(day)
+                                resolveRecurringDate(day, payDay)
                             }
                             else -> null
                         }
@@ -443,11 +443,18 @@ class SheetsRepositoryImpl @Inject constructor(
         return true
     }
 
-    /** Calculates the date for a recurring item that falls on [dayOfMonth] in the current month,
-     *  with Saturday → Friday and Sunday → Friday weekend adjustment. */
-    private fun resolveRecurringDate(dayOfMonth: Int): String {
+    /** Calculates the date for a recurring item that falls on [dayOfMonth] within the current
+     *  pay period (which starts on [payDay]). If [dayOfMonth] is before [payDay], the income
+     *  falls in the next calendar month (e.g. pay day=26, recurring=9 → next month's 9th).
+     *  Applies Saturday → Friday and Sunday → Friday weekend adjustment. */
+    private fun resolveRecurringDate(dayOfMonth: Int, payDay: Int): String {
         val fmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
         val cal = Calendar.getInstance()
+        // A recurring day before the pay day falls in the following calendar month
+        // within this pay period (e.g. pay day 26 Apr, day 9 → 9 May)
+        if (dayOfMonth < payDay) {
+            cal.add(Calendar.MONTH, 1)
+        }
         val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
         cal.set(Calendar.DAY_OF_MONTH, minOf(dayOfMonth, maxDay))
         when (cal.get(Calendar.DAY_OF_WEEK)) {
