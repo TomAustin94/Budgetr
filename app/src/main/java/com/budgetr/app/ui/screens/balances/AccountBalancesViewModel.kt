@@ -168,6 +168,9 @@ class AccountBalancesViewModel @Inject constructor(
             _uiState.update { it.copy(isRefreshing = true, error = null) }
             try {
                 repository.refreshAccountBalances()
+                repository.refreshTransactions(SheetTab.MONZO)
+                repository.refreshTransactions(SheetTab.HALIFAX_DEBIT)
+                repository.refreshTransactions(SheetTab.HALIFAX_CREDIT)
             } catch (e: Exception) {
                 _uiState.update { it.copy(error = e.message) }
             } finally {
