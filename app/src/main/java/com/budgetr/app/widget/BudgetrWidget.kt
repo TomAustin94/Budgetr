@@ -29,25 +29,63 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.budgetr.app.MainActivity
 import com.budgetr.app.data.local.entity.AccountBalanceEntity
+import com.budgetr.app.data.model.SheetTab
 import com.budgetr.app.data.model.TransactionCategory
 import dagger.hilt.android.EntryPointAccessors
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
 
 class BudgetrWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val entryPoint = EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            WidgetEntryPoint::class.java
+        )
+
         val balances = try {
-            EntryPointAccessors.fromApplication(
-                context.applicationContext,
-                WidgetEntryPoint::class.java
-            ).accountBalanceDao().getAllSync()
+            entryPoint.accountBalanceDao().getAllSync()
         } catch (e: Exception) {
             emptyList()
         }
 
+        // Subtract future-dated recurring income from each account balance, mirroring the
+        // same correction applied in AccountBalancesViewModel. The Cover Sheet pre-calculates
+        // remainingBalance including all recurring income regardless of scheduled date.
+        val adjustedBalances = try {
+            val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }.time
+            val transactionDao = entryPoint.transactionDao()
+            val futureRecurringByAccount = SheetTab.entries
+                .flatMap { tab -> transactionDao.getTransactionsByTabSync(tab.name) }
+                .filter { entity ->
+                    entity.category == TransactionCategory.RECURRING_INCOME.name &&
+                    run {
+                        val txDate = runCatching { dateFmt.parse(entity.date) }.getOrNull()
+                        txDate != null && txDate.after(today)
+                    }
+                }
+                .groupBy { entity ->
+                    runCatching { SheetTab.valueOf(entity.sheetTab).sheetName }.getOrNull()
+                }
+                .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+
+            balances.map { balance ->
+                val futureIncome = futureRecurringByAccount[balance.account] ?: 0.0
+                if (futureIncome != 0.0) balance.copy(remainingBalance = balance.remainingBalance - futureIncome)
+                else balance
+            }
+        } catch (e: Exception) {
+            balances
+        }
+
         provideContent {
-            WidgetContent(context = context, balances = balances)
+            WidgetContent(context = context, balances = adjustedBalances)
         }
     }
 }
