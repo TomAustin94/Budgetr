@@ -61,9 +61,10 @@ fun MainScreen(onSignOut: () -> Unit) {
                         selected = isSelected,
                         onClick = {
                             navController.navigate(item.route) {
-                                popUpTo(NavRoutes.ACCOUNT_BALANCES) { saveState = true }
+                                val isAccountsTab = item.route == NavRoutes.ACCOUNT_BALANCES
+                                popUpTo(NavRoutes.ACCOUNT_BALANCES) { saveState = !isAccountsTab }
                                 launchSingleTop = true
-                                restoreState = true
+                                restoreState = !isAccountsTab
                             }
                         },
                         icon = { Icon(item.icon, contentDescription = item.label) },
