@@ -83,6 +83,27 @@ class AccountBalancesViewModel @Inject constructor(
                     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
                 }.time
                 val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
+
+                // The Cover Sheet pre-calculates remainingBalance including ALL recurring income.
+                // We subtract any recurring income that hasn't fallen due yet so the app shows
+                // the correct available balance before those dates arrive.
+                val futureRecurringByAccount = allTx
+                    .filter {
+                        it.category == TransactionCategory.RECURRING_INCOME &&
+                        run {
+                            val txDate = runCatching { dateFmt.parse(it.date) }.getOrNull()
+                            txDate != null && txDate.after(today)
+                        }
+                    }
+                    .groupBy { it.sheetTab.sheetName }
+                    .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+
+                val adjustedBalances = balances.map { balance ->
+                    val futureIncome = futureRecurringByAccount[balance.account] ?: 0.0
+                    if (futureIncome != 0.0) balance.copy(remainingBalance = balance.remainingBalance - futureIncome)
+                    else balance
+                }
+
                 val income = allTx
                     .filter {
                         when (it.category) {
@@ -109,9 +130,9 @@ class AccountBalancesViewModel @Inject constructor(
                     }
                     .sumOf { kotlin.math.abs(it.amount) }
                 BalanceSummaryData(
-                    balances = balances,
+                    balances = adjustedBalances,
                     rollovers = rollovers,
-                    totalAvailable = balances.sumOf { it.remainingBalance },
+                    totalAvailable = adjustedBalances.sumOf { it.remainingBalance },
                     totalIncome = income,
                     totalOutgoings = outgoings
                 )
