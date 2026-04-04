@@ -14,6 +14,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 import javax.inject.Inject
 
 data class HomeUiState(
@@ -61,20 +64,63 @@ class HomeViewModel @Inject constructor(
                 repository.getTransactions(SheetTab.HALIFAX_CREDIT)
             ) { balances, monzoTx, halifaxDebitTx, halifaxCreditTx ->
                 val allTx = monzoTx + halifaxDebitTx + halifaxCreditTx
+                val today = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                }.time
+                val dateFmt = SimpleDateFormat("dd/MM/yyyy", Locale.UK)
+
+                val futureRecurringByAccount = allTx
+                    .filter {
+                        it.category == TransactionCategory.RECURRING_INCOME &&
+                        run {
+                            val txDate = runCatching { dateFmt.parse(it.date) }.getOrNull()
+                            txDate != null && txDate.after(today)
+                        }
+                    }
+                    .groupBy { it.sheetTab.sheetName }
+                    .mapValues { (_, txs) -> txs.sumOf { it.amount } }
+
+                val adjustedBalances = balances.map { balance ->
+                    val futureIncome = futureRecurringByAccount[balance.account] ?: 0.0
+                    if (futureIncome != 0.0) balance.copy(remainingBalance = balance.remainingBalance - futureIncome)
+                    else balance
+                }
+
                 val income = allTx
-                    .filter { it.category == TransactionCategory.INCOME || it.category == TransactionCategory.SALARY || it.category == TransactionCategory.RECURRING_INCOME }
+                    .filter {
+                        when (it.category) {
+                            TransactionCategory.INCOME,
+                            TransactionCategory.SALARY -> true
+                            TransactionCategory.RECURRING_INCOME -> {
+                                val txDate = runCatching { dateFmt.parse(it.date) }.getOrNull()
+                                txDate != null && !txDate.after(today)
+                            }
+                            else -> false
+                        }
+                    }
                     .sumOf { it.amount }
+                val currentMonth = Calendar.getInstance().get(Calendar.MONTH) + 1
                 val fixedCosts = allTx
-                    .filter { it.category == TransactionCategory.FIXED_COST }
+                    .filter {
+                        it.category == TransactionCategory.FIXED_COST &&
+                        (it.activeMonths == null || it.activeMonths.contains(currentMonth))
+                    }
                     .sumOf { kotlin.math.abs(it.amount) }
                 val oneOffCosts = allTx
                     .filter { it.category == TransactionCategory.ONE_OFF_COST }
                     .sumOf { kotlin.math.abs(it.amount) }
                 val outgoings = allTx
-                    .filter { it.category != TransactionCategory.INCOME && it.category != TransactionCategory.SALARY && it.category != TransactionCategory.RECURRING_INCOME && it.category != TransactionCategory.TRANSFER }
+                    .filter {
+                        it.category != TransactionCategory.INCOME &&
+                        it.category != TransactionCategory.SALARY &&
+                        it.category != TransactionCategory.RECURRING_INCOME &&
+                        it.category != TransactionCategory.TRANSFER &&
+                        (it.activeMonths == null || it.activeMonths.contains(currentMonth))
+                    }
                     .sumOf { kotlin.math.abs(it.amount) }
-                val totalAvailable = balances.sumOf { it.remainingBalance }
-                SummaryData(balances, totalAvailable, income, outgoings, fixedCosts, oneOffCosts)
+                val totalAvailable = adjustedBalances.sumOf { it.remainingBalance }
+                SummaryData(adjustedBalances, totalAvailable, income, outgoings, fixedCosts, oneOffCosts)
             }.collect { data ->
                 _uiState.update {
                     it.copy(
